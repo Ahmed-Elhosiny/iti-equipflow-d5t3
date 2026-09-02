@@ -1,0 +1,6 @@
+@EquipFlow.WebApi_HostAddress = http://localhost:5036
+
+GET {{EquipFlow.WebApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
