@@ -16,7 +16,7 @@ public class RejectionAndResubmissionTests
         
         var prerequisite = workOrder.AddSafetyPrerequisite("Wear safety goggles", isMandatory: true, sortOrder: 1);
         workOrder.CompleteSafetyPrerequisite(prerequisite.Id, "user-123");
-        workOrder.SubmitForApproval();
+        workOrder.SubmitForApproval("Test User");
         workOrder.Reject("approver-456", "Need more details");
         
         return workOrder;
@@ -67,7 +67,7 @@ public class RejectionAndResubmissionTests
         workOrder.CompleteSafetyPrerequisite(newPrereq.Id, "user-123");
 
         // Act
-        workOrder.SubmitForApproval();
+        workOrder.SubmitForApproval("Test User");
 
         // Assert
         Assert.Equal(WorkOrderStatus.PendingApproval, workOrder.Status);
