@@ -112,7 +112,7 @@ public class WorkOrder
         UpdateTimestamp();
     }
 
-    public void SubmitForApproval()
+    public void SubmitForApproval(string submittedBy)
     {
         if (!CanModifySafetyPrerequisites())
             throw new InvalidOperationException($"Cannot submit work order when status is {Status}.");
@@ -124,7 +124,7 @@ public class WorkOrder
             throw new InvalidOperationException("All mandatory safety prerequisites must be completed before submission.");
 
         Status = WorkOrderStatus.PendingApproval;
-        _approvalActions.Add(new ApprovalAction(Id, ApprovalActionType.Submitted, CreatedBy));
+        _approvalActions.Add(new ApprovalAction(Id, ApprovalActionType.Submitted, submittedBy));
         UpdateTimestamp();
     }
 
