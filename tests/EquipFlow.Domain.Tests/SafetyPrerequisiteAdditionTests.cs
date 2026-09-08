@@ -38,7 +38,7 @@ public class SafetyPrerequisiteAdditionTests
         var workOrder = CreateDraftWorkOrder();
         workOrder.AddSafetyPrerequisite("Wear safety goggles", isMandatory: true, sortOrder: 1);
         workOrder.CompleteSafetyPrerequisite(workOrder.SafetyPrerequisites.First().Id, "user-123");
-        workOrder.SubmitForApproval();
+        workOrder.SubmitForApproval("Test User");
 
         // Act & Assert
         var act = () => workOrder.AddSafetyPrerequisite("Another prerequisite", isMandatory: false, sortOrder: 2);
@@ -52,7 +52,7 @@ public class SafetyPrerequisiteAdditionTests
         var workOrder = CreateDraftWorkOrder();
         workOrder.AddSafetyPrerequisite("Wear safety goggles", isMandatory: true, sortOrder: 1);
         workOrder.CompleteSafetyPrerequisite(workOrder.SafetyPrerequisites.First().Id, "user-123");
-        workOrder.SubmitForApproval();
+        workOrder.SubmitForApproval("Test User");
         workOrder.Approve("approver-456");
 
         // Act & Assert
@@ -67,7 +67,7 @@ public class SafetyPrerequisiteAdditionTests
         var workOrder = CreateDraftWorkOrder();
         workOrder.AddSafetyPrerequisite("Wear safety goggles", isMandatory: true, sortOrder: 1);
         workOrder.CompleteSafetyPrerequisite(workOrder.SafetyPrerequisites.First().Id, "user-123");
-        workOrder.SubmitForApproval();
+        workOrder.SubmitForApproval("Test User");
         workOrder.Approve("approver-456");
         workOrder.MarkDispatched();
 
@@ -83,7 +83,7 @@ public class SafetyPrerequisiteAdditionTests
         var workOrder = CreateDraftWorkOrder();
         workOrder.AddSafetyPrerequisite("Wear safety goggles", isMandatory: true, sortOrder: 1);
         workOrder.CompleteSafetyPrerequisite(workOrder.SafetyPrerequisites.First().Id, "user-123");
-        workOrder.SubmitForApproval();
+        workOrder.SubmitForApproval("Test User");
         workOrder.Reject("approver-456", "Need more information");
 
         // Act

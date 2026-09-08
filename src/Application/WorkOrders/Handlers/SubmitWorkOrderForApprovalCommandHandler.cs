@@ -22,7 +22,7 @@ public class SubmitWorkOrderForApprovalCommandHandler
         var workOrder = await _repository.GetByIdAsync(command.WorkOrderId, cancellationToken)
             ?? throw new WorkOrderNotFoundException(command.WorkOrderId);
 
-        workOrder.SubmitForApproval();
+        workOrder.SubmitForApproval(command.SubmittedBy);
 
         await _repository.SaveChangesAsync(cancellationToken);
     }

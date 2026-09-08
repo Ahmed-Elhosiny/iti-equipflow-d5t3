@@ -16,7 +16,7 @@ public class ApprovalTests
         
         var prerequisite = workOrder.AddSafetyPrerequisite("Wear safety goggles", isMandatory: true, sortOrder: 1);
         workOrder.CompleteSafetyPrerequisite(prerequisite.Id, "user-123");
-        workOrder.SubmitForApproval();
+        workOrder.SubmitForApproval("Test User");
         
         return workOrder;
     }
