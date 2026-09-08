@@ -1,86 +1,46 @@
 ```
 # Build artifacts
-*.obj
-*.exe
+bin/
+obj/
 *.dll
-*.so
-*.a
-*.lib
+*.exe
 *.pdb
-*.ilk
-*.exp
-*.d
-*.pyc
-*.pyo
-*.class
-*.o
-*.out
+*.so
 *.dylib
-*.bundle
+*.class
 
 # Dependencies
+packages/
 node_modules/
 venv/
 .venv/
 .env
 .env.local
-.env.*
+*.env.*
 
-# IDE files
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *.tmp
-*.log
-.DS_Store
-Thumbs.db
 
-# Build directories
-bin/
-obj/
-Debug/
-Release/
-x64/
-x86/
-build/
-dist/
-target/
-.gradle/
-
-# Test coverage
+# Testing
+.coverage
 coverage/
 htmlcov/
-.coverage
 
-# Python specific
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-.pytest_cache/
-.mypy_cache/
-
-# Java specific
-*.class
-*.jar
-*.war
-*.ear
-*.nar
-target/
-.gradle/
+# Distribution / packaging
+dist/
 build/
-
-# C# specific
-*.userprefs
-*.user
-*.suo
-*.userosscache
-*.sln.docstates
-[Bb]in/
-[Oo]bj/
-[Tt]est[Rr]esult*/
-_UpgradeReport_Files/
+*.tar.gz
+*.whl
+*.egg-info/
 ```
