@@ -58,7 +58,7 @@ public class SafetyPrerequisiteCompletionTests
         var prerequisite = workOrder.AddSafetyPrerequisite("Wear safety goggles", isMandatory: true, sortOrder: 1);
         // Complete it first so we can get to Dispatched status
         workOrder.CompleteSafetyPrerequisite(prerequisite.Id, "user-123");
-        workOrder.SubmitForApproval();
+        workOrder.SubmitForApproval("Test User");
         workOrder.Approve("approver-456");
         workOrder.MarkDispatched();
         

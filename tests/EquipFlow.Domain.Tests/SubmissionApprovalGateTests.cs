@@ -22,7 +22,7 @@ public class SubmissionApprovalGateTests
         var workOrder = CreateDraftWorkOrder();
 
         // Act & Assert
-        var act = () => workOrder.SubmitForApproval();
+        var act = () => workOrder.SubmitForApproval("Test User");
         var exception = Assert.Throws<InvalidOperationException>(act);
         Assert.Contains("at least one safety prerequisite", exception.Message);
     }
@@ -36,7 +36,7 @@ public class SubmissionApprovalGateTests
         workOrder.AddSafetyPrerequisite("Check pressure levels", isMandatory: false, sortOrder: 2);
 
         // Act & Assert
-        var act = () => workOrder.SubmitForApproval();
+        var act = () => workOrder.SubmitForApproval("Test User");
         var exception = Assert.Throws<InvalidOperationException>(act);
         Assert.Contains("mandatory safety prerequisites must be completed", exception.Message);
     }
@@ -52,7 +52,7 @@ public class SubmissionApprovalGateTests
         workOrder.CompleteSafetyPrerequisite(prerequisite2.Id, "user-123");
 
         // Act
-        workOrder.SubmitForApproval();
+        workOrder.SubmitForApproval("Test User");
 
         // Assert
         Assert.Equal(WorkOrderStatus.PendingApproval, workOrder.Status);
@@ -71,7 +71,7 @@ public class SubmissionApprovalGateTests
         // Optional prerequisite remains incomplete
 
         // Act
-        workOrder.SubmitForApproval();
+        workOrder.SubmitForApproval("Test User");
 
         // Assert
         Assert.Equal(WorkOrderStatus.PendingApproval, workOrder.Status);
@@ -84,10 +84,10 @@ public class SubmissionApprovalGateTests
         var workOrder = CreateDraftWorkOrder();
         var prerequisite = workOrder.AddSafetyPrerequisite("Wear safety goggles", isMandatory: true, sortOrder: 1);
         workOrder.CompleteSafetyPrerequisite(prerequisite.Id, "user-123");
-        workOrder.SubmitForApproval();
+        workOrder.SubmitForApproval("Test User");
 
         // Act & Assert
-        var act = () => workOrder.SubmitForApproval();
+        var act = () => workOrder.SubmitForApproval("Test User");
         Assert.Throws<InvalidOperationException>(act);
     }
 }

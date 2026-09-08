@@ -18,6 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Application\EquipFlow.Application.csproj" />
     <ProjectReference Include="..\..\src\Domain\EquipFlow.Domain.csproj" />
   </ItemGroup>
