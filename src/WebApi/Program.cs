@@ -1,4 +1,8 @@
+using EquipFlow.Application.Agentic.Abstractions;
+using EquipFlow.Application.Budget.Ports;
+using EquipFlow.Application.Budget.Services;
 using EquipFlow.Infrastructure.Persistence;
+using EquipFlow.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -9,6 +13,8 @@ builder.Services.AddOpenApi();
 // Register DbContext for EF Core design-time tools
 builder.Services.AddDbContext<EquipFlowDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Host=localhost;Database=equipflow"));
+builder.Services.AddScoped<IUserBudgetRepository, UserBudgetRepository>();
+builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
 
 var app = builder.Build();
 

@@ -10,6 +10,7 @@ public class UserBudget
     public Guid UserId { get; private set; }
     public Money TotalLimit { get; private set; }
     public Money ConsumedAmount { get; private set; }
+    public IReadOnlyCollection<BudgetReservation> Reservations => _reservations.AsReadOnly();
     public Money ReservedAmount => _reservations.Aggregate(
         Money.FromDecimal(0),
         (total, reservation) => total + reservation.EstimatedCost);
