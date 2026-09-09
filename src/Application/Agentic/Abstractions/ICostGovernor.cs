@@ -5,6 +5,23 @@ namespace EquipFlow.Application.Agentic.Abstractions;
 
 public interface ICostGovernor
 {
+    Task<Guid> EstimateAndReserveAsync(
+        string userId,
+        int estimatedTokens,
+        decimal pricePerThousandTokens,
+        CancellationToken cancellationToken = default);
+
+    Task CommitAsync(
+        string userId,
+        Guid reservationId,
+        decimal actualUsageCost,
+        CancellationToken cancellationToken = default);
+
+    Task ReleaseAsync(
+        string userId,
+        Guid reservationId,
+        CancellationToken cancellationToken = default);
+
     Task<BudgetCheckResult> CheckBudgetAsync(
         string userId,
         EstimatedCost estimatedCost,
