@@ -1,5 +1,6 @@
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Agentic.Contracts;
+using EquipFlow.Domain.Budget.Exceptions;
 
 namespace EquipFlow.Application.Agentic.Orchestration;
 
@@ -9,55 +10,78 @@ public sealed class SequentialSupervisorOrchestrator(
     IAgent<WorkOrderInput, WorkOrderOutput> workOrderGenerator,
     ICostGovernor costGovernor)
 {
+    private const string MockUserId = "00000000-0000-0000-0000-000000000001";
+
     public async Task<WorkflowResult> RunWorkflowAsync(
         MaintenanceRequest request,
         IAgentContext context,
         CancellationToken cancellationToken = default)
     {
-        var budget = await costGovernor.CheckBudgetAsync(
-            request.UserId,
-            new EstimatedCost(0.05m, 100, 100),
-            cancellationToken);
+        // TODO: Extract the user identity from the authenticated user context.
+        var userId = string.IsNullOrWhiteSpace(context.UserId)
+            ? string.IsNullOrWhiteSpace(request.UserId) ? MockUserId : request.UserId
+            : context.UserId;
 
-        if (!budget.IsAllowed)
+        Guid reservationId;
+        try
         {
-            return WorkflowResult.Blocked(budget.Reason ?? "Cost governor blocked the workflow.");
+            reservationId = await costGovernor.EstimateAndReserveAsync(
+                userId,
+                estimatedTokens: 3000,
+                pricePerThousandTokens: 0.01m,
+                cancellationToken);
+        }
+        catch (InsufficientBudgetException exception)
+        {
+            return WorkflowResult.Blocked(exception.Message);
         }
 
-        var symptomResult = await symptomMatcher.ExecuteAsync(
-            new SymptomMatchInput(request.SymptomDescription, request.EquipmentIdHint),
-            context,
-            cancellationToken);
-
-        if (symptomResult.Error is not null)
+        try
         {
-            return WorkflowResult.Failed(symptomResult.Error);
+            var symptomResult = await symptomMatcher.ExecuteAsync(
+                new SymptomMatchInput(request.SymptomDescription, request.EquipmentIdHint),
+                context,
+                cancellationToken);
+
+            if (symptomResult.Error is not null)
+            {
+                await costGovernor.ReleaseAsync(userId, reservationId, cancellationToken);
+                return WorkflowResult.Failed(symptomResult.Error);
+            }
+
+            var diagnosticResult = await diagnosticPlanner.ExecuteAsync(
+                new DiagnosticPlanInput(
+                    symptomResult.Output.EquipmentId,
+                    symptomResult.Output.ManualRevision,
+                    symptomResult.Output.MatchedSymptoms),
+                context,
+                cancellationToken);
+
+            if (diagnosticResult.Error is not null)
+            {
+                await costGovernor.ReleaseAsync(userId, reservationId, cancellationToken);
+                return WorkflowResult.Failed(diagnosticResult.Error);
+            }
+
+            var workOrderResult = await workOrderGenerator.ExecuteAsync(
+                new WorkOrderInput(symptomResult.Output.EquipmentId, diagnosticResult.Output),
+                context,
+                cancellationToken);
+
+            if (workOrderResult.Error is not null)
+            {
+                await costGovernor.ReleaseAsync(userId, reservationId, cancellationToken);
+                return WorkflowResult.Failed(workOrderResult.Error);
+            }
+
+            await costGovernor.CommitAsync(userId, reservationId, actualUsageCost: 0.025m, cancellationToken);
+            return WorkflowResult.PendingApproval(workOrderResult.Output);
         }
-
-        var diagnosticResult = await diagnosticPlanner.ExecuteAsync(
-            new DiagnosticPlanInput(
-                symptomResult.Output.EquipmentId,
-                symptomResult.Output.ManualRevision,
-                symptomResult.Output.MatchedSymptoms),
-            context,
-            cancellationToken);
-
-        if (diagnosticResult.Error is not null)
+        catch
         {
-            return WorkflowResult.Failed(diagnosticResult.Error);
+            await costGovernor.ReleaseAsync(userId, reservationId, cancellationToken);
+            throw;
         }
-
-        var workOrderResult = await workOrderGenerator.ExecuteAsync(
-            new WorkOrderInput(symptomResult.Output.EquipmentId, diagnosticResult.Output),
-            context,
-            cancellationToken);
-
-        if (workOrderResult.Error is not null)
-        {
-            return WorkflowResult.Failed(workOrderResult.Error);
-        }
-
-        return WorkflowResult.PendingApproval(workOrderResult.Output);
     }
 }
 
