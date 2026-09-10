@@ -1,7 +1,8 @@
+using System.Collections.Concurrent;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Budget.Ports;
+using EquipFlow.Application.Ports;
 using EquipFlow.Domain.Budget;
-using EquipFlow.Domain.Budget.Exceptions;
 using EquipFlow.Domain.Budget.ValueObjects;
 using Microsoft.Extensions.Logging;
 using AgentTokenUsage = EquipFlow.Application.Agentic.Abstractions.TokenUsage;
@@ -10,40 +11,110 @@ namespace EquipFlow.Application.Budget.Services;
 
 public sealed class CostGovernorService(
     IUserBudgetRepository userBudgetRepository,
-    ILogger<CostGovernorService> logger) : ICostGovernor
+    ILogger<CostGovernorService> logger,
+    IModelRouter? modelRouter = null,
+    ICachePort? cachePort = null) : ICostGovernor
 {
     private const decimal SafetyMargin = 1.2m;
+    private const decimal MockFallbackRateMultiplier = 0.5m;
     private static readonly Money DefaultBudgetLimit = Money.FromDecimal(10m);
+    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> ReservationGates = new();
 
-    public async Task<Guid> EstimateAndReserveAsync(
+    public async Task<CostGovernorResult> EstimateAndReserveAsync(
         string userId,
         int estimatedTokens,
         decimal pricePerThousandTokens,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? semanticQuery = null)
     {
         var parsedUserId = ParseUserId(userId);
-        var estimatedCost = Money.FromDecimal(
-            estimatedTokens / 1000m * pricePerThousandTokens * SafetyMargin);
-        var budget = await GetOrCreateBudgetAsync(parsedUserId, cancellationToken);
-        var reservationId = Guid.NewGuid();
+        var reservationGate = ReservationGates.GetOrAdd(parsedUserId, _ => new SemaphoreSlim(1, 1));
+        await reservationGate.WaitAsync(cancellationToken);
 
+        try
+        {
+            var budget = await GetOrCreateBudgetAsync(parsedUserId, cancellationToken);
+            var primaryCost = EstimateCost(estimatedTokens, pricePerThousandTokens);
+
+            var primaryReservation = await TryReserveAsync(
+                budget,
+                primaryCost,
+                "primary",
+                cancellationToken);
+            if (primaryReservation is not null)
+            {
+                return primaryReservation;
+            }
+
+            var fallbackModel = modelRouter is null
+                ? null
+                : await modelRouter.GetCheaperModelAsync(pricePerThousandTokens, cancellationToken);
+            fallbackModel ??= new ModelRoute(
+                "fallback",
+                pricePerThousandTokens * MockFallbackRateMultiplier);
+            if (fallbackModel is not null && fallbackModel.PricePerThousandTokens < pricePerThousandTokens)
+            {
+                var fallbackCost = EstimateCost(estimatedTokens, fallbackModel.PricePerThousandTokens);
+                var fallbackReservation = await TryReserveAsync(
+                    budget,
+                    fallbackCost,
+                    fallbackModel.ModelName,
+                    cancellationToken);
+                if (fallbackReservation is not null)
+                {
+                    return fallbackReservation;
+                }
+
+                primaryCost = fallbackCost;
+            }
+
+            var cacheMatch = cachePort is null
+                ? null
+                : await cachePort.FindSemanticMatchAsync(semanticQuery, cancellationToken);
+            if (cacheMatch is not null)
+            {
+                return CostGovernorResult.Cached(
+                    cacheMatch.Response,
+                    primaryCost.Amount,
+                    budget.AvailableAmount.Amount);
+            }
+
+            return CostGovernorResult.Blocked(primaryCost.Amount, budget.AvailableAmount.Amount);
+        }
+        finally
+        {
+            reservationGate.Release();
+        }
+    }
+
+    private async Task<CostGovernorResult?> TryReserveAsync(
+        UserBudget budget,
+        Money estimatedCost,
+        string modelName,
+        CancellationToken cancellationToken)
+    {
+        var reservationId = Guid.NewGuid();
         if (!budget.TryReserve(reservationId, estimatedCost))
         {
-            throw new InsufficientBudgetException(
-                parsedUserId,
-                estimatedCost,
-                budget.AvailableAmount);
+            return null;
         }
 
         await userBudgetRepository.UpdateAsync(budget, cancellationToken);
         logger.LogInformation(
-            "Reserved {AmountUsd} USD for user {UserId} with reservation {ReservationId}.",
+            "Reserved {AmountUsd} USD with model {ModelName} using reservation {ReservationId}.",
             estimatedCost.Amount,
-            parsedUserId,
+            modelName,
             reservationId);
 
-        return reservationId;
+        return CostGovernorResult.Reserved(
+            reservationId,
+            modelName,
+            estimatedCost.Amount,
+            budget.AvailableAmount.Amount);
     }
+
+    private static Money EstimateCost(int estimatedTokens, decimal pricePerThousandTokens) =>
+        Money.FromDecimal(estimatedTokens / 1000m * pricePerThousandTokens * SafetyMargin);
 
     public async Task CommitAsync(
         string userId,

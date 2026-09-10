@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Domain\EquipFlow.Domain.csproj" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
+    <PackageReference Include="MediatR" Version="14.0.0" />
   </ItemGroup>
 
   <PropertyGroup>
