@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Budget.Ports;
 using EquipFlow.Application.Ports;
@@ -17,6 +18,7 @@ public sealed class CostGovernorService(
     private const decimal SafetyMargin = 1.2m;
     private const decimal MockFallbackRateMultiplier = 0.5m;
     private static readonly Money DefaultBudgetLimit = Money.FromDecimal(10m);
+    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> ReservationGates = new();
 
     public async Task<CostGovernorResult> EstimateAndReserveAsync(
         string userId,
@@ -26,53 +28,63 @@ public sealed class CostGovernorService(
         string? semanticQuery = null)
     {
         var parsedUserId = ParseUserId(userId);
-        var budget = await GetOrCreateBudgetAsync(parsedUserId, cancellationToken);
-        var primaryCost = EstimateCost(estimatedTokens, pricePerThousandTokens);
+        var reservationGate = ReservationGates.GetOrAdd(parsedUserId, _ => new SemaphoreSlim(1, 1));
+        await reservationGate.WaitAsync(cancellationToken);
 
-        var primaryReservation = await TryReserveAsync(
-            budget,
-            primaryCost,
-            "primary",
-            cancellationToken);
-        if (primaryReservation is not null)
+        try
         {
-            return primaryReservation;
-        }
+            var budget = await GetOrCreateBudgetAsync(parsedUserId, cancellationToken);
+            var primaryCost = EstimateCost(estimatedTokens, pricePerThousandTokens);
 
-        var fallbackModel = modelRouter is null
-            ? null
-            : await modelRouter.GetCheaperModelAsync(pricePerThousandTokens, cancellationToken);
-        fallbackModel ??= new ModelRoute(
-            "fallback",
-            pricePerThousandTokens * MockFallbackRateMultiplier);
-        if (fallbackModel is not null && fallbackModel.PricePerThousandTokens < pricePerThousandTokens)
-        {
-            var fallbackCost = EstimateCost(estimatedTokens, fallbackModel.PricePerThousandTokens);
-            var fallbackReservation = await TryReserveAsync(
+            var primaryReservation = await TryReserveAsync(
                 budget,
-                fallbackCost,
-                fallbackModel.ModelName,
+                primaryCost,
+                "primary",
                 cancellationToken);
-            if (fallbackReservation is not null)
+            if (primaryReservation is not null)
             {
-                return fallbackReservation;
+                return primaryReservation;
             }
 
-            primaryCost = fallbackCost;
-        }
+            var fallbackModel = modelRouter is null
+                ? null
+                : await modelRouter.GetCheaperModelAsync(pricePerThousandTokens, cancellationToken);
+            fallbackModel ??= new ModelRoute(
+                "fallback",
+                pricePerThousandTokens * MockFallbackRateMultiplier);
+            if (fallbackModel is not null && fallbackModel.PricePerThousandTokens < pricePerThousandTokens)
+            {
+                var fallbackCost = EstimateCost(estimatedTokens, fallbackModel.PricePerThousandTokens);
+                var fallbackReservation = await TryReserveAsync(
+                    budget,
+                    fallbackCost,
+                    fallbackModel.ModelName,
+                    cancellationToken);
+                if (fallbackReservation is not null)
+                {
+                    return fallbackReservation;
+                }
 
-        var cacheMatch = cachePort is null
-            ? null
-            : await cachePort.FindSemanticMatchAsync(semanticQuery, cancellationToken);
-        if (cacheMatch is not null)
+                primaryCost = fallbackCost;
+            }
+
+            var cacheMatch = cachePort is null
+                ? null
+                : await cachePort.FindSemanticMatchAsync(semanticQuery, cancellationToken);
+            if (cacheMatch is not null)
+            {
+                return CostGovernorResult.Cached(
+                    cacheMatch.Response,
+                    primaryCost.Amount,
+                    budget.AvailableAmount.Amount);
+            }
+
+            return CostGovernorResult.Blocked(primaryCost.Amount, budget.AvailableAmount.Amount);
+        }
+        finally
         {
-            return CostGovernorResult.Cached(
-                cacheMatch.Response,
-                primaryCost.Amount,
-                budget.AvailableAmount.Amount);
+            reservationGate.Release();
         }
-
-        return CostGovernorResult.Blocked(primaryCost.Amount, budget.AvailableAmount.Amount);
     }
 
     private async Task<CostGovernorResult?> TryReserveAsync(

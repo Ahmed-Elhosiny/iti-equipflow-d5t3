@@ -21,9 +21,8 @@ public sealed class UserBudgetRepository(EquipFlowDbContext context) : IUserBudg
         await context.UserBudgets.AddAsync(budget, ct);
     }
 
-    public Task UpdateAsync(UserBudget budget, CancellationToken ct)
+    public async Task UpdateAsync(UserBudget budget, CancellationToken ct)
     {
-        context.UserBudgets.Update(budget);
-        return Task.CompletedTask;
+        await context.SaveChangesAsync(ct);
     }
 }
