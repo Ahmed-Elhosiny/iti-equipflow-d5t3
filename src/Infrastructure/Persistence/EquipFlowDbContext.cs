@@ -15,6 +15,8 @@ public class EquipFlowDbContext : DbContext
     public DbSet<SafetyPrerequisite> SafetyPrerequisites => Set<SafetyPrerequisite>();
     public DbSet<ApprovalAction> ApprovalActions => Set<ApprovalAction>();
     public DbSet<UserBudget> UserBudgets { get; set; } = null!;
+    public DbSet<Document> Documents => Set<Document>();
+    public DbSet<DocumentChunk> DocumentChunks => Set<DocumentChunk>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
