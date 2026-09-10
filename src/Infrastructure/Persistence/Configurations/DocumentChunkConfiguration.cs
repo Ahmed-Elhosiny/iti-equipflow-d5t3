@@ -1,6 +1,7 @@
 using EquipFlow.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Pgvector;
 
 namespace EquipFlow.Infrastructure.Persistence.Configurations;
 
@@ -23,6 +24,11 @@ public sealed class DocumentChunkConfiguration : IEntityTypeConfiguration<Docume
             .IsRequired();
 
         builder.Property(chunk => chunk.Embedding)
+            .HasConversion(
+                value => value.IsEmpty ? null : new Vector(value.ToArray()),
+                value => value == null
+                    ? ReadOnlyMemory<float>.Empty
+                    : new ReadOnlyMemory<float>(value.ToArray()))
             .IsRequired()
             .HasColumnType("vector(1536)");
 
