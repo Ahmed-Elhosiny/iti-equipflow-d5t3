@@ -3,6 +3,7 @@ using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Budget.Ports;
 using EquipFlow.Application.Budget.Services;
 using EquipFlow.Application.CostGovernor.Queries;
+using EquipFlow.Application.Ports;
 using EquipFlow.WebApi.Endpoints;
 using EquipFlow.Infrastructure.Persistence;
 using EquipFlow.Infrastructure.Persistence.Repositories;
@@ -44,6 +45,8 @@ builder.Services.AddAuthorization();
 builder.Services.AddDbContext<EquipFlowDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Host=localhost;Database=equipflow"));
 builder.Services.AddScoped<IUserBudgetRepository, UserBudgetRepository>();
+builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
+builder.Services.AddScoped<IDocumentChunkRepository, DocumentChunkRepository>();
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
 
 var app = builder.Build();
