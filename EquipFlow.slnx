@@ -9,5 +9,6 @@
     <Project Path="tests/EquipFlow.Domain.Tests/EquipFlow.Domain.Tests.csproj" />
     <Project Path="tests/EquipFlow.Application.Tests/EquipFlow.Application.Tests.csproj" />
     <Project Path="tests/EquipFlow.IntegrationTests/EquipFlow.IntegrationTests.csproj" />
+    <Project Path="tests/EquipFlow.WebApi.IntegrationTests/EquipFlow.WebApi.IntegrationTests.csproj" />
   </Folder>
 </Solution>

@@ -3,6 +3,7 @@ using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Budget.Ports;
 using EquipFlow.Application.Budget.Services;
 using EquipFlow.Application.CostGovernor.Queries;
+using EquipFlow.Application.Ports;
 using EquipFlow.WebApi.Endpoints;
 using EquipFlow.Infrastructure.Persistence;
 using EquipFlow.Infrastructure.Persistence.Repositories;
@@ -14,6 +15,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddOpenApi();
+builder.Services.AddAntiforgery();
 builder.Services.AddMediatR(configuration =>
     configuration.RegisterServicesFromAssembly(typeof(GetMyBudgetQuery).Assembly));
 
@@ -38,12 +40,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.FromMinutes(1)
         };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("ManagerOnly", policy => policy.RequireRole("Manager"));
+});
 
 // Register DbContext for EF Core design-time tools
 builder.Services.AddDbContext<EquipFlowDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Host=localhost;Database=equipflow"));
 builder.Services.AddScoped<IUserBudgetRepository, UserBudgetRepository>();
+builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
+builder.Services.AddScoped<IDocumentChunkRepository, DocumentChunkRepository>();
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
 
 var app = builder.Build();
@@ -51,6 +58,7 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseAntiforgery();
 
 if (app.Environment.IsDevelopment())
 {
@@ -77,6 +85,7 @@ app.MapGet("/weatherforecast", () =>
 .WithName("GetWeatherForecast");
 
 app.MapCostGovernorEndpoints();
+app.MapDocumentsEndpoints();
 
 app.Run();
 
