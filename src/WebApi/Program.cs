@@ -89,6 +89,7 @@ app.MapGet("/weatherforecast", () =>
 
 app.MapCostGovernorEndpoints();
 app.MapDocumentsEndpoints();
+app.MapSearchEndpoints();
 
 app.Run();
 

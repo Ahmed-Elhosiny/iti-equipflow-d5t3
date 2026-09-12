@@ -17,17 +17,20 @@ public sealed class SearchDocumentsQueryHandler
     private readonly IEmbeddingPort _embeddingPort;
     private readonly IVectorSearchPort _vectorSearchPort;
     private readonly IKeywordSearchPort _keywordSearchPort;
+    private readonly ReciprocalRankFusionService _fusionService;
     private readonly IRerankerPort? _rerankerPort;
 
     public SearchDocumentsQueryHandler(
         IEmbeddingPort embeddingPort,
         IVectorSearchPort vectorSearchPort,
         IKeywordSearchPort keywordSearchPort,
+        ReciprocalRankFusionService fusionService,
         IRerankerPort? rerankerPort = null)
     {
         _embeddingPort = embeddingPort;
         _vectorSearchPort = vectorSearchPort;
         _keywordSearchPort = keywordSearchPort;
+        _fusionService = fusionService;
         _rerankerPort = rerankerPort;
     }
 
@@ -53,7 +56,7 @@ public sealed class SearchDocumentsQueryHandler
         var keywordSearch = _keywordSearchPort.SearchAsync(query, cancellationToken);
         await Task.WhenAll(vectorSearch, keywordSearch);
 
-        IReadOnlyList<RetrievedChunk> candidates = ReciprocalRankFusionService.Fuse(
+        IReadOnlyList<RetrievedChunk> candidates = _fusionService.Fuse(
             vectorSearch.Result,
             keywordSearch.Result);
 

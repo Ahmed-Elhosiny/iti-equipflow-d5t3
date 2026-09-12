@@ -2,9 +2,9 @@ using EquipFlow.Application.Search.Models;
 
 namespace EquipFlow.Application.Search.Services;
 
-public static class ReciprocalRankFusionService
+public sealed class ReciprocalRankFusionService
 {
-    public static IReadOnlyList<RetrievedChunk> Fuse(
+    public IReadOnlyList<RetrievedChunk> Fuse(
         IReadOnlyList<RetrievedChunk> vectorResults,
         IReadOnlyList<RetrievedChunk> keywordResults,
         int k = 60)
