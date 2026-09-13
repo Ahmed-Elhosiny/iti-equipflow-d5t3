@@ -6,6 +6,7 @@ using EquipFlow.Application.CostGovernor.Queries;
 using EquipFlow.Application.Ports;
 using EquipFlow.Application.Search.Queries;
 using EquipFlow.WebApi.Endpoints;
+using EquipFlow.Infrastructure.Extensions;
 using EquipFlow.Infrastructure.Persistence;
 using EquipFlow.Infrastructure.Persistence.Repositories;
 using EquipFlow.Infrastructure.Search;
@@ -55,6 +56,7 @@ builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddScoped<IDocumentChunkRepository, DocumentChunkRepository>();
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
 builder.Services.AddRagSearchInfrastructure();
+builder.Services.AddLLMProviders(builder.Configuration);
 
 var app = builder.Build();
 
