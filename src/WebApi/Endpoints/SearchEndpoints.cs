@@ -17,6 +17,9 @@ public static class SearchEndpoints
     {
         endpoints.MapPost("/api/search", Search)
             .WithName("SearchDocuments")
+            .WithSummary("Search maintenance knowledge base using hybrid retrieval")
+            .WithDescription("Executes a hybrid search (dense vector + keyword) across ingested maintenance documents. Supports metadata filtering by equipment, line, type, and version. Returns grounded chunks with citations, or a structured refusal if evidence is insufficient.")
+            .WithTags("Search")
             .RequireAuthorization(policy => policy.RequireRole(
                 "Technician",
                 "Engineer",
