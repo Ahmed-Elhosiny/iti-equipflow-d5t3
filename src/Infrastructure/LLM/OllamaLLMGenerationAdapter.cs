@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using EquipFlow.Application.Options;
@@ -97,12 +98,124 @@ public sealed class OllamaLLMGenerationAdapter : ILLMGenerationPort
     }
 
     /// <inheritdoc />
-    public IAsyncEnumerable<LLMStreamChunk> StreamAsync(
+    public async IAsyncEnumerable<LLMStreamChunk> StreamAsync(
         LLMRequest request,
-        CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        throw new NotImplementedException(
-            "Ollama streaming will be implemented in a subsequent issue.");
+        ArgumentNullException.ThrowIfNull(request);
+
+        var payload = new
+        {
+            model = _options.Value.Model,
+            messages = request.Messages.Select(message => new
+            {
+                role = message.Role.ToString().ToLowerInvariant(),
+                content = message.Content
+            }),
+            stream = true
+        };
+
+        HttpResponseMessage response;
+        try
+        {
+            using var httpRequest = new HttpRequestMessage(
+                HttpMethod.Post,
+                BuildChatEndpoint(_options.Value.BaseUrl))
+            {
+                Content = JsonContent.Create(payload)
+            };
+
+            response = await _httpClient.SendAsync(
+                httpRequest,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError(
+                    "Ollama chat streaming failed with HTTP status code {StatusCode}.",
+                    (int)response.StatusCode);
+                response.EnsureSuccessStatusCode();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Ollama chat streaming failed.");
+            throw;
+        }
+
+        using (response)
+        {
+            Stream responseStream;
+            try
+            {
+                responseStream = await response.Content.ReadAsStreamAsync(
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "Ollama chat streaming failed.");
+                throw;
+            }
+
+            await using (responseStream)
+            using (var reader = new StreamReader(responseStream))
+            {
+                while (true)
+                {
+                    LLMStreamChunk? chunk = null;
+                    bool shouldStop;
+
+                    try
+                    {
+                        var line = await reader.ReadLineAsync(cancellationToken);
+                        if (line is null)
+                        {
+                            break;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(line))
+                        {
+                            continue;
+                        }
+
+                        var result = JsonSerializer.Deserialize<OllamaStreamingResponse>(line)
+                            ?? throw new JsonException("Ollama streaming response was empty.");
+
+                        chunk = new LLMStreamChunk(
+                            string.IsNullOrEmpty(result.Message?.Content) ? null : result.Message.Content,
+                            null,
+                            result.Done,
+                            result.DoneReason);
+                        shouldStop = result.Done;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception exception)
+                    {
+                        _logger.LogError(exception, "Ollama chat streaming failed.");
+                        throw;
+                    }
+
+                    yield return chunk!;
+
+                    if (shouldStop)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     private static string BuildChatEndpoint(string baseUrl) =>
@@ -115,4 +228,9 @@ public sealed class OllamaLLMGenerationAdapter : ILLMGenerationPort
 
     private sealed record OllamaMessage(
         [property: JsonPropertyName("content")] string? Content);
+
+    private sealed record OllamaStreamingResponse(
+        [property: JsonPropertyName("message")] OllamaMessage? Message,
+        [property: JsonPropertyName("done")] bool Done,
+        [property: JsonPropertyName("done_reason")] string? DoneReason);
 }
