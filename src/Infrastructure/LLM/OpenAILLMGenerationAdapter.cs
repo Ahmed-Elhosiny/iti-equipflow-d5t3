@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenAI;
 using OpenAI.Chat;
+using System.Runtime.CompilerServices;
 using ApplicationChatMessage = EquipFlow.Application.Ports.LLM.ChatMessage;
 
 namespace EquipFlow.Infrastructure.LLM;
@@ -81,11 +82,86 @@ public sealed class OpenAILLMGenerationAdapter : ILLMGenerationPort
     }
 
     /// <inheritdoc />
-    public IAsyncEnumerable<LLMStreamChunk> StreamAsync(
+    public async IAsyncEnumerable<LLMStreamChunk> StreamAsync(
         LLMRequest request,
-        CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        throw new NotImplementedException("Streaming will be implemented in a subsequent issue.");
+        ArgumentNullException.ThrowIfNull(request);
+
+        IAsyncEnumerator<StreamingChatCompletionUpdate> updates;
+        try
+        {
+            var messages = request.Messages.Select(MapMessage).ToList();
+            var completionOptions = new ChatCompletionOptions
+            {
+                Temperature = (float)request.Temperature,
+                MaxOutputTokenCount = request.MaxTokens
+            };
+
+            updates = _client
+                .GetChatClient(_options.Value.Model)
+                .CompleteChatStreamingAsync(messages, completionOptions, cancellationToken)
+                .GetAsyncEnumerator(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "OpenAI chat completion streaming failed.");
+            throw;
+        }
+
+        await using (updates)
+        {
+            while (true)
+            {
+                bool hasUpdate;
+                try
+                {
+                    hasUpdate = await updates.MoveNextAsync();
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogError(exception, "OpenAI chat completion streaming failed.");
+                    throw;
+                }
+
+                if (!hasUpdate)
+                {
+                    break;
+                }
+
+                var update = updates.Current;
+                string? deltaContent;
+                ChatFinishReason? finishReason;
+                try
+                {
+                    deltaContent = string.Concat(update.ContentUpdate.Select(part => part.Text));
+                    finishReason = update.FinishReason;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogError(exception, "OpenAI chat completion streaming failed.");
+                    throw;
+                }
+
+                yield return new LLMStreamChunk(
+                    string.IsNullOrEmpty(deltaContent) ? null : deltaContent,
+                    null,
+                    finishReason is not null,
+                    finishReason?.ToString());
+            }
+        }
     }
 
     private static OpenAI.Chat.ChatMessage MapMessage(ApplicationChatMessage message) => message.Role switch
