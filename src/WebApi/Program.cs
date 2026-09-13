@@ -4,9 +4,11 @@ using EquipFlow.Application.Budget.Ports;
 using EquipFlow.Application.Budget.Services;
 using EquipFlow.Application.CostGovernor.Queries;
 using EquipFlow.Application.Ports;
+using EquipFlow.Application.Search.Queries;
 using EquipFlow.WebApi.Endpoints;
 using EquipFlow.Infrastructure.Persistence;
 using EquipFlow.Infrastructure.Persistence.Repositories;
+using EquipFlow.Infrastructure.Search;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -17,7 +19,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddAntiforgery();
 builder.Services.AddMediatR(configuration =>
-    configuration.RegisterServicesFromAssembly(typeof(GetMyBudgetQuery).Assembly));
+    configuration.RegisterServicesFromAssembly(typeof(SearchDocumentsQuery).Assembly));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -52,6 +54,7 @@ builder.Services.AddScoped<IUserBudgetRepository, UserBudgetRepository>();
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddScoped<IDocumentChunkRepository, DocumentChunkRepository>();
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
+builder.Services.AddRagSearchInfrastructure();
 
 var app = builder.Build();
 
@@ -86,6 +89,7 @@ app.MapGet("/weatherforecast", () =>
 
 app.MapCostGovernorEndpoints();
 app.MapDocumentsEndpoints();
+app.MapSearchEndpoints();
 
 app.Run();
 

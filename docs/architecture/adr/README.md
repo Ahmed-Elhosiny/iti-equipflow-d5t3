@@ -6,6 +6,7 @@
 | 002 | Chunking & Retrieval Strategy | Planned |
 | 003 | Vector Store Selection | Planned |
 | [004](ADR-004-cost-governor-enforcement.md) | Cost Governor Enforcement (T3) | Accepted |
+| [005](ADR-005-hybrid-retrieval-and-rrf.md) | Hybrid Retrieval and Reciprocal Rank Fusion | Accepted |
 
 ITI mandates ≥4 ADRs covering chunking/retrieval, orchestration pattern, vector store
 choice, and the twist's central decision. 002 and 003 are the next documentation increment.
