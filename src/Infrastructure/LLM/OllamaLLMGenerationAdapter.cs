@@ -45,16 +45,36 @@ public sealed class OllamaLLMGenerationAdapter : ILLMGenerationPort
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var payload = new
+        var messages = request.Messages.Select(message => new
         {
-            model = _options.Value.Model,
-            messages = request.Messages.Select(message => new
+            role = message.Role.ToString().ToLowerInvariant(),
+            content = message.Content
+        });
+
+        object payload = request.Tools is { Count: > 0 } tools
+            ? new
             {
-                role = message.Role.ToString().ToLowerInvariant(),
-                content = message.Content
-            }),
-            stream = false
-        };
+                model = _options.Value.Model,
+                messages,
+                stream = false,
+                tools = tools.Select(tool => new
+                {
+                    type = "function",
+                    function = new
+                    {
+                        name = tool.Name,
+                        description = tool.Description,
+                        parameters = JsonSerializer.Deserialize<JsonElement>(
+                            tool.ParametersJsonSchema)
+                    }
+                }).ToArray()
+            }
+            : new
+            {
+                model = _options.Value.Model,
+                messages,
+                stream = false
+            };
 
         try
         {
@@ -79,10 +99,19 @@ public sealed class OllamaLLMGenerationAdapter : ILLMGenerationPort
                 throw new JsonException("Ollama response did not contain message.content.");
             }
 
+            var toolCalls = result.ToolCalls is { Count: > 0 }
+                ? result.ToolCalls
+                    .Select(toolCall => new EquipFlow.Application.Ports.LLM.ToolCall(
+                        Guid.NewGuid().ToString("N"),
+                        toolCall.Function?.Name ?? string.Empty,
+                        JsonSerializer.Serialize(toolCall.Function?.Arguments)))
+                    .ToArray()
+                : null;
+
             return new LLMResult(
                 result.Message.Content,
-                null,
-                "stop",
+                toolCalls,
+                toolCalls is not null ? "tool_calls" : "stop",
                 result.PromptEvalCount,
                 result.EvalCount);
         }
@@ -224,7 +253,15 @@ public sealed class OllamaLLMGenerationAdapter : ILLMGenerationPort
     private sealed record OllamaChatResponse(
         [property: JsonPropertyName("message")] OllamaMessage? Message,
         [property: JsonPropertyName("prompt_eval_count")] int PromptEvalCount,
-        [property: JsonPropertyName("eval_count")] int EvalCount);
+        [property: JsonPropertyName("eval_count")] int EvalCount,
+        [property: JsonPropertyName("tool_calls")] IReadOnlyList<OllamaToolCall>? ToolCalls);
+
+    private sealed record OllamaToolCall(
+        [property: JsonPropertyName("function")] OllamaFunctionCall? Function);
+
+    private sealed record OllamaFunctionCall(
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("arguments")] JsonElement? Arguments);
 
     private sealed record OllamaMessage(
         [property: JsonPropertyName("content")] string? Content);
