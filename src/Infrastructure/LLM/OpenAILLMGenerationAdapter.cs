@@ -6,6 +6,7 @@ using OpenAI;
 using OpenAI.Chat;
 using System.Runtime.CompilerServices;
 using ApplicationChatMessage = EquipFlow.Application.Ports.LLM.ChatMessage;
+using ApplicationToolCall = EquipFlow.Application.Ports.LLM.ToolCall;
 
 namespace EquipFlow.Infrastructure.LLM;
 
@@ -56,16 +57,36 @@ public sealed class OpenAILLMGenerationAdapter : ILLMGenerationPort
                 MaxOutputTokenCount = request.MaxTokens
             };
 
+            if (request.Tools is { Count: > 0 })
+            {
+                foreach (var tool in request.Tools)
+                {
+                    completionOptions.Tools.Add(
+                        ChatTool.CreateFunctionTool(
+                            tool.Name,
+                            tool.Description,
+                            BinaryData.FromString(tool.ParametersJsonSchema)));
+                }
+            }
+
             var completion = await _client
                 .GetChatClient(_options.Value.Model)
                 .CompleteChatAsync(messages, completionOptions, cancellationToken);
 
             var response = completion.Value;
             var content = string.Join(string.Empty, response.Content.Select(part => part.Text));
+            IReadOnlyList<ApplicationToolCall>? toolCalls = response.ToolCalls is { Count: > 0 }
+                ? response.ToolCalls
+                    .Select(toolCall => new ApplicationToolCall(
+                        toolCall.Id,
+                        toolCall.FunctionName,
+                        toolCall.FunctionArguments.ToString()))
+                    .ToList()
+                : null;
 
             return new LLMResult(
                 content,
-                null,
+                toolCalls,
                 response.FinishReason.ToString(),
                 response.Usage?.InputTokenCount ?? 0,
                 response.Usage?.OutputTokenCount ?? 0);
