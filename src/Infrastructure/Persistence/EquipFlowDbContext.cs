@@ -22,6 +22,11 @@ public class EquipFlowDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(EquipFlowDbContext).Assembly);
+        if (Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory")
+        {
+            modelBuilder.Entity<DocumentChunk>().Ignore(chunk => chunk.Embedding);
+        }
+
         modelBuilder.Entity<AgentEventEntity>(entity =>
 {
     entity.HasKey(e => e.Id);
