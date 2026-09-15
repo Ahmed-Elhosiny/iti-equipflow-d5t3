@@ -34,7 +34,8 @@ public sealed record CompletionRequest(
 public sealed record CompletionResult(
     string Text,
     TokenUsage Usage,
-    string? FinishReason = null);
+    string? FinishReason = null,
+    IReadOnlyList<ToolCall>? ToolCalls = null);
 
 public sealed record StreamingChunk(
     string Text,
@@ -57,6 +58,11 @@ public sealed record ToolDefinition(
     string ParametersJsonSchema);
 
 public sealed record ToolCallRequest(
+    string Name,
+    string ArgumentsJson);
+
+public sealed record ToolCall(
+    string Id,
     string Name,
     string ArgumentsJson);
 
