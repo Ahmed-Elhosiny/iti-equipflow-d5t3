@@ -19,12 +19,14 @@ public sealed class StaticAgentToolRegistry : IAgentToolRegistry
             ["SymptomMatcher"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 "SearchManuals",
-                "QueryFaultHistory"
+                "QueryFaultHistory",
+                
             },
             ["DiagnosticSafetyPlanner"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 "GetEquipmentSpecs",
-                "GenerateSafetyChecklist"
+                "GenerateSafetyChecklist",
+                "QueryFaultHistory"
             },
             ["WorkOrderGenerator"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
