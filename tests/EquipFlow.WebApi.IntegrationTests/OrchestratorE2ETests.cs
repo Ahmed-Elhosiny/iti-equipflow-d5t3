@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Encodings.Web;
 using EquipFlow.Application.Agentic.Abstractions;
+using EquipFlow.Application.Agentic.Contracts;
 using EquipFlow.Application.Agentic.Orchestration;
 using EquipFlow.Application.Budget.Ports;
 using EquipFlow.Domain.Budget;
@@ -50,11 +51,9 @@ public sealed class OrchestratorE2ETests : IClassFixture<EquipFlowWebApplication
         body.Should().NotBeNull();
         body!.Status.Should().Be(WorkflowStatus.PendingApproval);
     }
-
-    private sealed record WorkflowResponse(WorkflowStatus Status);
 }
 
-public sealed class EquipFlowWebApplicationFactory : WebApplicationFactory<Program>
+    public class EquipFlowWebApplicationFactory : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -87,12 +86,12 @@ public sealed class EquipFlowWebApplicationFactory : WebApplicationFactory<Progr
     }
 }
 
-public sealed class MockLlmProvider : ILLMProvider
+public class MockLlmProvider : ILLMProvider
 {
     private static readonly Guid EquipmentId =
         Guid.Parse("10101010-1010-1010-1010-101010101010");
 
-    public Task<CompletionResult> CompleteAsync(
+    public virtual Task<CompletionResult> CompleteAsync(
         CompletionRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -144,6 +143,77 @@ public sealed class MockLlmProvider : ILLMProvider
     private static CompletionResult JsonResult(string json) =>
         new(json, new TokenUsage(1, 1));
 }
+
+public sealed class FailingEquipFlowWebApplicationFactory : EquipFlowWebApplicationFactory
+{
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        base.ConfigureWebHost(builder);
+        builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<ILLMProvider>();
+            services.AddScoped<ILLMProvider, FailingMockLlmProvider>();
+        });
+    }
+}
+
+public sealed class FailingMockLlmProvider : MockLlmProvider
+{
+    public override Task<CompletionResult> CompleteAsync(
+        CompletionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.Prompt.Contains("Budget validation result:", StringComparison.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new CompletionResult(
+                "{ this is malformed work order JSON",
+                new TokenUsage(1, 1)));
+        }
+
+        return base.CompleteAsync(request, cancellationToken);
+    }
+}
+
+public sealed class OrchestratorDegradationTests
+    : IClassFixture<FailingEquipFlowWebApplicationFactory>
+{
+    private readonly HttpClient client;
+
+    public OrchestratorDegradationTests(FailingEquipFlowWebApplicationFactory factory)
+    {
+        client = factory.CreateClient();
+    }
+
+    [Fact]
+    public async Task Analyze_ShouldReturnPartialSuccess_WhenWorkOrderGeneratorFails()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/ai/analyze")
+        {
+            Content = JsonContent.Create(new
+            {
+                symptomDescription = "Pump P-101 is overheating and vibrating",
+                equipmentIdHint = "P-101"
+            })
+        };
+        request.Headers.Add(TestAuthHandler.RoleHeader, "Engineer");
+
+        using var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<WorkflowResponse>();
+        body.Should().NotBeNull();
+        body!.Status.Should().Be(WorkflowStatus.PartialSuccess);
+        body.DiagnosticPlan.Should().NotBeNull();
+        body.DiagnosticPlan!.SafetyPrerequisites.Should().NotBeEmpty();
+        body.Draft.Should().BeNull();
+    }
+}
+
+public sealed record WorkflowResponse(
+    WorkflowStatus Status,
+    WorkOrderOutput? Draft = null,
+    DiagnosticPlanOutput? DiagnosticPlan = null);
 
 public sealed class DeterministicToolDispatcher : IToolDispatcher
 {
