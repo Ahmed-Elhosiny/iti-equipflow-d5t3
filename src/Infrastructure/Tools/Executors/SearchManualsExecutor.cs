@@ -50,7 +50,12 @@ public sealed class SearchManualsExecutor : IToolExecutor
             new SearchManualsResponse.Chunk(
                 Guid.NewGuid(),
                 "Dummy manual content for testing",
-                0.95)
+                0.95,
+                new SearchManualsResponse.Citation(
+                    Guid.Empty,
+                    "Dummy manual",
+                    null,
+                    null))
         ]);
         var resultJson = JsonSerializer.Serialize(response);
 

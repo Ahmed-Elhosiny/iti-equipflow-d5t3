@@ -17,7 +17,20 @@ public sealed record SearchManualsResponse(
     /// <summary>
     /// A matching manual chunk.
     /// </summary>
-    public sealed record Chunk(Guid ChunkId, string Content, double Score);
+    public sealed record Chunk(
+      Guid ChunkId,
+      string Content,
+      double Score,
+      Citation Citation);
+
+    /// <summary>
+    /// Citation metadata for a retrieved manual chunk.
+    /// </summary>
+    public sealed record Citation(
+      Guid DocumentId,
+      string DocumentTitle,
+      int? Page,
+      string? Section);
 }
 
 /// <summary>

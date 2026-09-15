@@ -5,9 +5,13 @@
     <Project Path="src/Infrastructure/EquipFlow.Infrastructure.csproj" />
     <Project Path="src/WebApi/EquipFlow.WebApi.csproj" />
   </Folder>
+  <Folder Name="/src/Application/" />
+  <Folder Name="/src/Domain/" />
+  <Folder Name="/src/Infrastructure/" />
   <Folder Name="/tests/">
     <Project Path="tests/EquipFlow.Domain.Tests/EquipFlow.Domain.Tests.csproj" />
     <Project Path="tests/EquipFlow.Application.Tests/EquipFlow.Application.Tests.csproj" />
+    <Project Path="tests/EquipFlow.Infrastructure.Tests/EquipFlow.Infrastructure.Tests.csproj" />
     <Project Path="tests/EquipFlow.IntegrationTests/EquipFlow.IntegrationTests.csproj" />
     <Project Path="tests/EquipFlow.WebApi.IntegrationTests/EquipFlow.WebApi.IntegrationTests.csproj" />
   </Folder>

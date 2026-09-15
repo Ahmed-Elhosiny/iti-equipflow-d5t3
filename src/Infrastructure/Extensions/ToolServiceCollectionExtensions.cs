@@ -1,5 +1,6 @@
 using EquipFlow.Application.Tools.Ports;
 using EquipFlow.Infrastructure.Tools.Dispatcher;
+using EquipFlow.Infrastructure.Tools;
 using EquipFlow.Infrastructure.Tools.Executors;
 using EquipFlow.Infrastructure.Tools.Registry;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,7 +40,7 @@ public static class ToolServiceCollectionExtensions
             return new AuthorizingToolDispatcher(innerDispatcher, agentToolRegistry, logger);
         });
         services.AddSingleton<IAgentToolRegistry, StaticAgentToolRegistry>();
-        services.AddScoped<IToolExecutor, SearchManualsExecutor>();
+        services.AddScoped<IToolExecutor, SearchManualsToolExecutor>();
         services.AddScoped<IToolExecutor, QueryFaultHistoryExecutor>();
         services.AddScoped<IToolExecutor, GetEquipmentSpecsExecutor>();
         services.AddScoped<IToolExecutor, GenerateSafetyChecklistExecutor>();
