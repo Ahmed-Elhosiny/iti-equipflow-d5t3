@@ -25,4 +25,11 @@
     <ProjectReference Include="..\..\src\WebApi\EquipFlow.WebApi.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Evaluation\golden-set.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>golden-set.json</TargetPath>
+    </None>
+  </ItemGroup>
+
 </Project>
