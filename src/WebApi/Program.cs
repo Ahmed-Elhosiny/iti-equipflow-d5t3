@@ -1,16 +1,22 @@
 using System.Text;
 using EquipFlow.Application.Agentic.Abstractions;
+using EquipFlow.Application.Agentic.Agents;
+using EquipFlow.Application.Agentic.Contracts;
 using EquipFlow.Application.Agentic.Orchestration;
 using EquipFlow.Application.Budget.Ports;
 using EquipFlow.Application.Budget.Services;
 using EquipFlow.Application.CostGovernor.Queries;
 using EquipFlow.Application.Ports;
 using EquipFlow.Application.Search.Queries;
+using EquipFlow.Application.WorkOrders.Ports;
 using EquipFlow.WebApi.Endpoints;
+using EquipFlow.Infrastructure.AI;
+using EquipFlow.Infrastructure.Documents.Extractors;
 using EquipFlow.Infrastructure.Extensions;
 using EquipFlow.Infrastructure.Persistence;
 using EquipFlow.Infrastructure.Persistence.Repositories;
 using EquipFlow.Infrastructure.Search;
+using EquipFlow.Infrastructure.Text;
 using EquipFlow.WebApi.Middleware;
 using EquipFlow.WebApi.Options;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -86,12 +92,26 @@ builder.Services.AddHealthChecks();
 builder.Services.AddDbContext<EquipFlowDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Host=localhost;Database=equipflow"));
 builder.Services.AddScoped<IUserBudgetRepository, UserBudgetRepository>();
+builder.Services.AddScoped<IWorkOrderRepository, WorkOrderRepository>();
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddScoped<IDocumentChunkRepository, DocumentChunkRepository>();
+builder.Services.AddScoped<ITextChunker, SimpleTextChunker>();
+builder.Services.AddScoped<IEmbeddingPort, OpenAiEmbeddingAdapter>();
+builder.Services.AddScoped<PdfDocumentExtractor>();
+builder.Services.AddScoped<DocxDocumentExtractor>();
+builder.Services.AddScoped<IDocumentExtractor>(serviceProvider =>
+    serviceProvider.GetRequiredService<PdfDocumentExtractor>());
+builder.Services.AddScoped<IAgent<SymptomMatchInput, SymptomMatchOutput>, SymptomMatcherAgent>();
+builder.Services.AddScoped<IAgent<DiagnosticPlanInput, DiagnosticPlanOutput>, DiagnosticSafetyPlannerAgent>();
+builder.Services.AddScoped<IAgent<WorkOrderInput, WorkOrderOutput>, WorkOrderGeneratorAgent>();
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
 builder.Services.AddScoped<SequentialSupervisorOrchestrator>();
 builder.Services.AddRagSearchInfrastructure();
 builder.Services.AddLLMProviders(builder.Configuration);
+builder.Services.AddScoped<ILLMProvider>(serviceProvider =>
+    new ConfiguredLlmProvider(
+        serviceProvider.GetRequiredService<EquipFlow.Application.Ports.LLM.ILLMProviderFactory>(),
+        builder.Configuration["LLM:Provider"] ?? "Mock"));
 builder.Services.AddEquipFlowTools();
 
 var app = builder.Build();
@@ -122,3 +142,80 @@ app.MapWorkOrderEndpoints();
 app.Run();
 
 // public partial class Program;
+
+file sealed class ConfiguredLlmProvider(
+    EquipFlow.Application.Ports.LLM.ILLMProviderFactory providerFactory,
+    string providerName) : ILLMProvider
+{
+    public async Task<CompletionResult> CompleteAsync(
+        CompletionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await GetProvider().CompleteAsync(
+            BuildRequest(request),
+            cancellationToken);
+
+        return new CompletionResult(
+            result.Content ?? string.Empty,
+            new TokenUsage(result.PromptTokens, result.CompletionTokens),
+            result.FinishReason,
+            result.ToolCalls?.Select(toolCall => new ToolCall(
+                toolCall.Id,
+                toolCall.Name,
+                toolCall.ArgumentsJson)).ToArray());
+    }
+
+    public async IAsyncEnumerable<StreamingChunk> StreamAsync(
+        CompletionRequest request,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var llmRequest = BuildRequest(request);
+
+        await foreach (var chunk in GetProvider().StreamAsync(llmRequest, cancellationToken))
+        {
+            yield return new StreamingChunk(chunk.DeltaContent ?? string.Empty, chunk.IsFinished);
+        }
+    }
+
+    public Task<EmbeddingResult> GenerateEmbeddingAsync(
+        string text,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Embeddings are provided by IEmbeddingPort.");
+
+    public Task<ToolExecutionResult> ExecuteToolAsync(
+        ToolCallRequest request,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Tools are dispatched by IToolDispatcher.");
+
+    private static EquipFlow.Application.Ports.LLM.LLMRequest BuildRequest(
+        CompletionRequest request)
+    {
+        var messages = new List<EquipFlow.Application.Ports.LLM.ChatMessage>();
+        if (!string.IsNullOrWhiteSpace(request.SystemPrompt))
+        {
+            messages.Add(new EquipFlow.Application.Ports.LLM.ChatMessage(
+                EquipFlow.Application.Ports.LLM.ChatRole.System,
+                request.SystemPrompt,
+                null,
+                null));
+        }
+
+        messages.Add(new EquipFlow.Application.Ports.LLM.ChatMessage(
+            EquipFlow.Application.Ports.LLM.ChatRole.User,
+            request.Prompt,
+            null,
+            null));
+
+        return new EquipFlow.Application.Ports.LLM.LLMRequest(
+            messages,
+            request.Tools?.Select(tool => new EquipFlow.Application.Ports.LLM.ToolDefinition(
+                tool.Name,
+                tool.Description,
+                tool.ParametersJsonSchema)).ToArray(),
+            request.Temperature,
+            request.MaxTokens);
+    }
+
+    private EquipFlow.Application.Ports.LLM.ILLMGenerationPort GetProvider() =>
+        providerFactory.GetProvider(providerName);
+}
