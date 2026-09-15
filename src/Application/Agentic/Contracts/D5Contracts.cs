@@ -25,4 +25,11 @@ public record SafetyPrerequisite(string Description, bool IsMandatory);
 
 // Agent 3: Work Order Generator
 public record WorkOrderInput(string EquipmentId, DiagnosticPlanOutput DiagnosticPlan);
-public record WorkOrderOutput(string Title, string Description, IReadOnlyList<string> RequiredParts, string Priority);
+public record WorkOrderOutput(
+	string Title,
+	string Description,
+	IReadOnlyList<string> RequiredParts,
+	string Priority,
+	Guid? WorkOrderId = null,
+	string? Summary = null,
+	decimal EstimatedCost = 0);
