@@ -2,10 +2,11 @@ using EquipFlow.Application.Common;
 using EquipFlow.Application.WorkOrders.Commands;
 using EquipFlow.Application.WorkOrders.Ports;
 using EquipFlow.Domain.Enums;
+using MediatR;
 
 namespace EquipFlow.Application.WorkOrders.Handlers;
 
-public class SubmitWorkOrderForApprovalCommandHandler
+public class SubmitWorkOrderForApprovalCommandHandler : IRequestHandler<SubmitWorkOrderForApprovalCommand>
 {
     private readonly IWorkOrderRepository _repository;
 
@@ -25,5 +26,10 @@ public class SubmitWorkOrderForApprovalCommandHandler
         workOrder.SubmitForApproval(command.SubmittedBy);
 
         await _repository.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task Handle(SubmitWorkOrderForApprovalCommand request, CancellationToken cancellationToken)
+    {
+        await HandleAsync(request, cancellationToken);
     }
 }

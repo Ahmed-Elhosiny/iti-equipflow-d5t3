@@ -2,10 +2,11 @@ using EquipFlow.Application.Common;
 using EquipFlow.Application.WorkOrders.Commands;
 using EquipFlow.Application.WorkOrders.Ports;
 using EquipFlow.Domain.Enums;
+using MediatR;
 
 namespace EquipFlow.Application.WorkOrders.Handlers;
 
-public class ReviewWorkOrderCommandHandler
+public class ReviewWorkOrderCommandHandler : IRequestHandler<ReviewWorkOrderCommand>
 {
     private readonly IWorkOrderRepository _repository;
 
@@ -35,5 +36,10 @@ public class ReviewWorkOrderCommandHandler
         }
 
         await _repository.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task Handle(ReviewWorkOrderCommand request, CancellationToken cancellationToken)
+    {
+        await HandleAsync(request, cancellationToken);
     }
 }

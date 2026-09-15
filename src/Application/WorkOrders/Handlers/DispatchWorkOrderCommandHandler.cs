@@ -1,10 +1,11 @@
 using EquipFlow.Application.Common;
 using EquipFlow.Application.WorkOrders.Commands;
 using EquipFlow.Application.WorkOrders.Ports;
+using MediatR;
 
 namespace EquipFlow.Application.WorkOrders.Handlers;
 
-public class DispatchWorkOrderCommandHandler
+public class DispatchWorkOrderCommandHandler : IRequestHandler<DispatchWorkOrderCommand>
 {
     private readonly IWorkOrderRepository _repository;
 
@@ -24,5 +25,10 @@ public class DispatchWorkOrderCommandHandler
         workOrder.MarkDispatched();
 
         await _repository.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task Handle(DispatchWorkOrderCommand request, CancellationToken cancellationToken)
+    {
+        await HandleAsync(request, cancellationToken);
     }
 }
