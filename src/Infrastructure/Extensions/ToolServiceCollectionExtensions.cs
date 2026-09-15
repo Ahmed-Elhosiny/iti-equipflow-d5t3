@@ -2,6 +2,7 @@ using EquipFlow.Application.Tools.Ports;
 using EquipFlow.Infrastructure.Tools.Dispatcher;
 using EquipFlow.Infrastructure.Tools.Executors;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace EquipFlow.Infrastructure.Extensions;
 
@@ -21,7 +22,14 @@ public static class ToolServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddScoped<IToolDispatcher, ToolDispatcher>();
+        // Wire up the TL-006 JSON Schema validation decorator around the core dispatcher.
+        services.AddScoped<ToolDispatcher>();
+        services.AddScoped<IToolDispatcher>(sp =>
+        {
+            var innerDispatcher = sp.GetRequiredService<ToolDispatcher>();
+            var logger = sp.GetRequiredService<ILogger<ValidatingToolDispatcher>>();
+            return new ValidatingToolDispatcher(innerDispatcher, logger);
+        });
         services.AddScoped<IToolExecutor, SearchManualsExecutor>();
         services.AddScoped<IToolExecutor, QueryFaultHistoryExecutor>();
         services.AddScoped<IToolExecutor, GetEquipmentSpecsExecutor>();
