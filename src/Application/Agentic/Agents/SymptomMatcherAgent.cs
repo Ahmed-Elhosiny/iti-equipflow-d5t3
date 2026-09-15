@@ -1,6 +1,7 @@
 using System.Text.Json;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Agentic.Contracts;
+using EquipFlow.Application.Agentic.Events;
 using EquipFlow.Application.Prompts;
 using EquipFlow.Application.Tools.Definitions;
 using EquipFlow.Application.Tools.Ports;
@@ -41,11 +42,15 @@ public sealed class SymptomMatcherAgent(
             .Replace("{EquipmentId}", input.EquipmentIdHint ?? "unknown", StringComparison.Ordinal)
             .Replace("{Evidence}", "No evidence retrieved yet.", StringComparison.Ordinal);
 
-        var completion = await llmProvider.CompleteAsync(
+        var completion = await AgentEventRecorder.CompleteAsync(
+            llmProvider,
             new CompletionRequest(
                 userPrompt,
                 $"{prompt.SystemPrompt}\nYou may use the supplied SearchManuals and QueryFaultHistory tools when evidence is needed.",
                 Tools: AllowedTools),
+            context,
+            Name,
+            1,
             cancellationToken);
 
         var evidence = new List<EvidenceChunk>();
@@ -59,11 +64,16 @@ public sealed class SymptomMatcherAgent(
                         $"Tool '{toolCall.Name}' is not allowed for agent '{Name}'.");
                 }
 
-                var dispatchResult = await toolDispatcher.DispatchAsync(
+                var dispatchResult = await AgentEventRecorder.DispatchAsync(
+                    toolDispatcher,
                     new ToolInvocationRequest(
                         toolCall.Name,
                         toolCall.ArgumentsJson,
                         CreateInvocationContext(context)),
+                    context,
+                    Name,
+                    1,
+                    toolCall.Id,
                     cancellationToken);
 
                 if (!dispatchResult.Succeeded)
@@ -83,10 +93,14 @@ public sealed class SymptomMatcherAgent(
                 }
             }
 
-            completion = await llmProvider.CompleteAsync(
+            completion = await AgentEventRecorder.CompleteAsync(
+                llmProvider,
                 new CompletionRequest(
                     $"{userPrompt}\n\nRetrieved evidence:\n{JsonSerializer.Serialize(evidence, JsonOptions)}",
                     prompt.SystemPrompt),
+                context,
+                Name,
+                2,
                 cancellationToken);
         }
 

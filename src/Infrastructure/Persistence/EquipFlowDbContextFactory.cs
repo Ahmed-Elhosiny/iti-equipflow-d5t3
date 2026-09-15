@@ -8,8 +8,9 @@ public sealed class EquipFlowDbContextFactory : IDesignTimeDbContextFactory<Equi
 {
     public EquipFlowDbContext CreateDbContext(string[] args)
     {
-        var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
-
+        var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") 
+            ?? "Host=localhost;Database=equipflow_design_time";
+            
         if (string.IsNullOrEmpty(connectionString))
         {
             throw new InvalidOperationException("Database connection string is not configured.");

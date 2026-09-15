@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using EquipFlow.Application.Agentic.Events;
 
 namespace EquipFlow.Application.Agentic.Abstractions;
 
@@ -18,6 +19,11 @@ public interface IAgentContext
 {
     string CorrelationId { get; }
     string UserId { get; }
+}
+
+public interface IAgentEventCollector
+{
+    void Add(AgentEventBase @event);
 }
 
 public sealed record AgentResult<T>(
