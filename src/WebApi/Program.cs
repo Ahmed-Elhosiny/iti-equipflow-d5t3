@@ -10,43 +10,76 @@ using EquipFlow.Infrastructure.Extensions;
 using EquipFlow.Infrastructure.Persistence;
 using EquipFlow.Infrastructure.Persistence.Repositories;
 using EquipFlow.Infrastructure.Search;
+using EquipFlow.WebApi.Middleware;
+using EquipFlow.WebApi.Options;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddOpenApi();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "EquipFlow API",
+        Version = "v1",
+        Description = "D5 Industrial Field Maintenance + T3 Cost Governor API"
+    });
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Enter a valid JWT bearer token."
+    });
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference("Bearer", document, "Bearer")] = new List<string>()
+    });
+});
 builder.Services.AddAntiforgery();
 builder.Services.AddMediatR(configuration =>
     configuration.RegisterServicesFromAssembly(typeof(SearchDocumentsQuery).Assembly));
+builder.Services.AddOptions<JwtOptions>()
+    .Bind(builder.Configuration.GetSection(JwtOptions.SectionName));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        var signingKey = builder.Configuration["Authentication:SigningKey"];
-        var issuer = builder.Configuration["Authentication:Issuer"];
-        var audience = builder.Configuration["Authentication:Audience"];
+        var jwtSettings = builder.Configuration
+            .GetSection(JwtOptions.SectionName)
+            .Get<JwtOptions>() ?? new JwtOptions();
 
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = string.IsNullOrWhiteSpace(signingKey)
+            IssuerSigningKey = string.IsNullOrWhiteSpace(jwtSettings.Key)
                 ? null
-                : new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
-            ValidateIssuer = !string.IsNullOrWhiteSpace(issuer),
-            ValidIssuer = issuer,
-            ValidateAudience = !string.IsNullOrWhiteSpace(audience),
-            ValidAudience = audience,
+                : new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Key)),
+            ValidateIssuer = !string.IsNullOrWhiteSpace(jwtSettings.Issuer),
+            ValidIssuer = jwtSettings.Issuer,
+            ValidateAudience = !string.IsNullOrWhiteSpace(jwtSettings.Audience),
+            ValidAudience = jwtSettings.Audience,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1)
         };
     });
 builder.Services.AddAuthorization(options =>
 {
+    options.AddPolicy("Technician", policy => policy.RequireRole("Technician"));
+    options.AddPolicy("Engineer", policy => policy.RequireRole("Engineer"));
+    options.AddPolicy("Manager", policy => policy.RequireRole("Manager"));
     options.AddPolicy("ManagerOnly", policy => policy.RequireRole("Manager"));
+    options.AddPolicy("Supervisor", policy => policy.RequireRole("Supervisor"));
 });
+builder.Services.AddHealthChecks();
 
 // Register DbContext for EF Core design-time tools
 builder.Services.AddDbContext<EquipFlowDbContext>(options =>
@@ -62,6 +95,7 @@ builder.Services.AddEquipFlowTools();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
@@ -69,7 +103,12 @@ app.UseAntiforgery();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
+
+app.MapHealthChecks("/health");
+app.MapHealthChecks("/ready");
 
 var summaries = new[]
 {
