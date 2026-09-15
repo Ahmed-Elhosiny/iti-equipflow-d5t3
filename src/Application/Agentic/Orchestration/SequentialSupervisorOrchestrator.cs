@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Agentic.Contracts;
+using EquipFlow.Application.Agentic.Events;
 using Microsoft.Extensions.Logging;
 
 namespace EquipFlow.Application.Agentic.Orchestration;
@@ -10,6 +11,7 @@ public sealed class SequentialSupervisorOrchestrator(
     IAgent<DiagnosticPlanInput, DiagnosticPlanOutput> diagnosticPlanner,
     IAgent<WorkOrderInput, WorkOrderOutput> workOrderGenerator,
     ICostGovernor costGovernor,
+    IAgentEventStore agentEventStore,
     ILogger<SequentialSupervisorOrchestrator> logger)
 {
     private const string MockUserId = "00000000-0000-0000-0000-000000000001";
@@ -21,47 +23,69 @@ public sealed class SequentialSupervisorOrchestrator(
         IAgentContext context,
         CancellationToken cancellationToken = default)
     {
+        var correlationId = Guid.TryParse(context.CorrelationId, out var parsedCorrelationId)
+            ? parsedCorrelationId
+            : Guid.NewGuid();
+        var collectedEvents = new List<AgentEventBase>();
+        var workflowStopwatch = Stopwatch.StartNew();
+        var eventCollector = new RecordingAgentContext(context, correlationId, collectedEvents);
+        var finalStatus = AgentRunStatus.Failed;
+        string? finalError = null;
+        string? outputSummary = null;
+        Guid? reservationId = null;
+        var resolvedUserId = string.IsNullOrWhiteSpace(context.UserId)
+            ? string.IsNullOrWhiteSpace(request.UserId) ? MockUserId : request.UserId
+            : context.UserId;
+
+        collectedEvents.Add(new AgentRunStarted(
+            correlationId,
+            DateTimeOffset.UtcNow,
+            nameof(SequentialSupervisorOrchestrator),
+            0,
+            request.SymptomDescription,
+            (int)WorkflowTimeout.TotalMilliseconds));
+
         using var workflowTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         workflowTimeout.CancelAfter(WorkflowTimeout);
         var workflowToken = workflowTimeout.Token;
 
-        // TODO: Extract the user identity from the authenticated user context.
-        var userId = string.IsNullOrWhiteSpace(context.UserId)
-            ? string.IsNullOrWhiteSpace(request.UserId) ? MockUserId : request.UserId
-            : context.UserId;
-
-        var reservation = await costGovernor.EstimateAndReserveAsync(
-            userId,
-            estimatedTokens: 3000,
-            pricePerThousandTokens: 0.01m,
-            workflowToken);
-
-        if (reservation.Status == CostGovernorStatus.Blocked)
-        {
-            return WorkflowResult.Blocked(
-                reservation.Reason,
-                reservation.EstimatedCost,
-                reservation.RemainingBudget);
-        }
-
-        if (reservation.Status == CostGovernorStatus.Cached)
-        {
-            return WorkflowResult.Cached(reservation.CachedResponse!);
-        }
-
-        var reservationId = reservation.ReservationId!.Value;
-
         try
         {
+            // TODO: Extract the user identity from the authenticated user context.
+            var reservation = await costGovernor.EstimateAndReserveAsync(
+                resolvedUserId,
+                estimatedTokens: 3000,
+                pricePerThousandTokens: 0.01m,
+                workflowToken);
+
+            if (reservation.Status == CostGovernorStatus.Blocked)
+            {
+                finalError = reservation.Reason;
+                return WorkflowResult.Blocked(
+                    reservation.Reason,
+                    reservation.EstimatedCost,
+                    reservation.RemainingBudget);
+            }
+
+            if (reservation.Status == CostGovernorStatus.Cached)
+            {
+                finalStatus = AgentRunStatus.Success;
+                outputSummary = "Semantic cache hit.";
+                return WorkflowResult.Cached(reservation.CachedResponse!);
+            }
+
+            reservationId = reservation.ReservationId!.Value;
+
             var symptomResult = await ExecuteStepAsync(
                 symptomMatcher,
                 new SymptomMatchInput(request.SymptomDescription, request.EquipmentIdHint),
-                context,
+                eventCollector,
                 workflowToken);
 
             if (symptomResult.Error is not null)
             {
-                await ReleaseReservationAsync(userId, reservationId);
+                await ReleaseReservationAsync(resolvedUserId, reservationId.Value);
+                finalError = symptomResult.Error;
                 return WorkflowResult.Failed(symptomResult.Error);
             }
 
@@ -71,34 +95,70 @@ public sealed class SequentialSupervisorOrchestrator(
                     symptomResult.Output.EquipmentId,
                     symptomResult.Output.ManualRevision,
                     symptomResult.Output.MatchedSymptoms),
-                context,
+                eventCollector,
                 workflowToken);
 
             if (diagnosticResult.Error is not null)
             {
-                await ReleaseReservationAsync(userId, reservationId);
+                await ReleaseReservationAsync(resolvedUserId, reservationId.Value);
+                finalError = diagnosticResult.Error;
                 return WorkflowResult.Failed(diagnosticResult.Error);
             }
 
             var workOrderResult = await ExecuteStepAsync(
                 workOrderGenerator,
                 new WorkOrderInput(symptomResult.Output.EquipmentId, diagnosticResult.Output),
-                context,
+                eventCollector,
                 workflowToken);
 
             if (workOrderResult.Error is not null)
             {
-                await ReleaseReservationAsync(userId, reservationId);
+                await ReleaseReservationAsync(resolvedUserId, reservationId.Value);
+                finalStatus = AgentRunStatus.PartialSuccess;
+                finalError = workOrderResult.Error;
+                outputSummary = "Diagnostic plan produced; work order generation degraded.";
                 return WorkflowResult.PartialSuccess(diagnosticResult.Output, workOrderResult.Error);
             }
 
-            await costGovernor.CommitAsync(userId, reservationId, actualUsageCost: 0.025m, workflowToken);
+            await costGovernor.CommitAsync(resolvedUserId, reservationId.Value, actualUsageCost: 0.025m, workflowToken);
+            finalStatus = AgentRunStatus.Success;
+            outputSummary = workOrderResult.Output.Summary;
             return WorkflowResult.PendingApproval(workOrderResult.Output);
+        }
+        catch (OperationCanceledException exception) when (workflowToken.IsCancellationRequested)
+        {
+            finalStatus = AgentRunStatus.Timeout;
+            finalError = exception.Message;
+            if (reservationId.HasValue)
+            {
+                await ReleaseReservationAsync(resolvedUserId, reservationId.Value);
+            }
+
+            throw;
         }
         catch
         {
-            await ReleaseReservationAsync(userId, reservationId);
+            finalStatus = AgentRunStatus.Failed;
+            if (reservationId.HasValue)
+            {
+                await ReleaseReservationAsync(resolvedUserId, reservationId.Value);
+            }
+
             throw;
+        }
+        finally
+        {
+            collectedEvents.Add(new AgentRunCompleted(
+                correlationId,
+                DateTimeOffset.UtcNow,
+                nameof(SequentialSupervisorOrchestrator),
+                0,
+                finalStatus,
+                workflowStopwatch.ElapsedMilliseconds,
+                finalError,
+                outputSummary));
+
+            await agentEventStore.AppendRangeAsync(collectedEvents, cancellationToken);
         }
     }
 
@@ -161,6 +221,18 @@ public sealed class SequentialSupervisorOrchestrator(
 
     private Task ReleaseReservationAsync(string userId, Guid reservationId) =>
         costGovernor.ReleaseAsync(userId, reservationId, CancellationToken.None);
+
+    private sealed class RecordingAgentContext(
+        IAgentContext source,
+        Guid correlationId,
+        List<AgentEventBase> collectedEvents) : IAgentContext, IAgentEventCollector
+    {
+        public string CorrelationId => correlationId.ToString();
+
+        public string UserId => source.UserId;
+
+        public void Add(AgentEventBase @event) => collectedEvents.Add(@event);
+    }
 }
 
 public record MaintenanceRequest(string UserId, string SymptomDescription, string? EquipmentIdHint = null);

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Agentic.Contracts;
+using EquipFlow.Application.Agentic.Events;
 using EquipFlow.Application.Tools.Definitions;
 using EquipFlow.Application.Tools.Ports;
 
@@ -64,11 +65,15 @@ public sealed class DiagnosticSafetyPlannerAgent(
             No tool results have been retrieved yet.
             """;
 
-        var completion = await llmProvider.CompleteAsync(
+        var completion = await AgentEventRecorder.CompleteAsync(
+            llmProvider,
             new CompletionRequest(
                 userPrompt,
                 SystemPrompt + "\nYou may use only the supplied GetEquipmentSpecs and GenerateSafetyChecklist tools.",
                 Tools: AllowedTools),
+            context,
+            Name,
+            1,
             cancellationToken);
 
         var toolResults = new List<string>();
@@ -82,11 +87,16 @@ public sealed class DiagnosticSafetyPlannerAgent(
                         $"Tool '{toolCall.Name}' is not allowed for agent '{Name}'.");
                 }
 
-                var dispatchResult = await toolDispatcher.DispatchAsync(
+                var dispatchResult = await AgentEventRecorder.DispatchAsync(
+                    toolDispatcher,
                     new ToolInvocationRequest(
                         toolCall.Name,
                         toolCall.ArgumentsJson,
                         CreateInvocationContext(context)),
+                    context,
+                    Name,
+                    1,
+                    toolCall.Id,
                     cancellationToken);
 
                 if (!dispatchResult.Succeeded)
@@ -100,10 +110,14 @@ public sealed class DiagnosticSafetyPlannerAgent(
                     JsonOptions));
             }
 
-            completion = await llmProvider.CompleteAsync(
+            completion = await AgentEventRecorder.CompleteAsync(
+                llmProvider,
                 new CompletionRequest(
                     $"{userPrompt}\n\nTool results:\n{string.Join("\n", toolResults)}\n\nReturn the final diagnostic plan now.",
                     SystemPrompt),
+                context,
+                Name,
+                2,
                 cancellationToken);
         }
 

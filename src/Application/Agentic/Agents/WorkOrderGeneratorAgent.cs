@@ -1,6 +1,7 @@
 using System.Text.Json;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Agentic.Contracts;
+using EquipFlow.Application.Agentic.Events;
 using EquipFlow.Application.Tools.Definitions;
 using EquipFlow.Application.Tools.Ports;
 
@@ -63,8 +64,12 @@ public sealed class WorkOrderGeneratorAgent(
             required parts, priority, and estimated cost. Request ValidateBudget before CreateWorkOrder.
             """;
 
-        var completion = await llmProvider.CompleteAsync(
+        var completion = await AgentEventRecorder.CompleteAsync(
+            llmProvider,
             new CompletionRequest(userPrompt, SystemPrompt, Tools: AllowedTools),
+            context,
+            Name,
+            1,
             cancellationToken);
 
         if (completion.ToolCalls is null || completion.ToolCalls.Count == 0)
@@ -122,10 +127,14 @@ public sealed class WorkOrderGeneratorAgent(
         }
 
         var createdWorkOrderId = ReadWorkOrderId(created.ResultJson);
-        var finalCompletion = await llmProvider.CompleteAsync(
+        var finalCompletion = await AgentEventRecorder.CompleteAsync(
+            llmProvider,
             new CompletionRequest(
                 $"{userPrompt}\n\nBudget validation result:\n{approvedBudget!.ResultJson}\n\nCreateWorkOrder result:\n{created.ResultJson}\n\nReturn the final work order summary now.",
                 SystemPrompt),
+            context,
+            Name,
+            2,
             cancellationToken);
 
         try
@@ -158,11 +167,16 @@ public sealed class WorkOrderGeneratorAgent(
         ToolCall toolCall,
         IAgentContext context,
         CancellationToken cancellationToken) =>
-        await toolDispatcher.DispatchAsync(
+        await AgentEventRecorder.DispatchAsync(
+            toolDispatcher,
             new ToolInvocationRequest(
                 toolCall.Name,
                 toolCall.ArgumentsJson,
                 CreateInvocationContext(context)),
+            context,
+            Name,
+            1,
+            toolCall.Id,
             cancellationToken);
 
     private ToolInvocationContext CreateInvocationContext(IAgentContext context) =>
