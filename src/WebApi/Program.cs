@@ -1,5 +1,6 @@
 using System.Text;
 using EquipFlow.Application.Agentic.Abstractions;
+using EquipFlow.Application.Agentic.Orchestration;
 using EquipFlow.Application.Budget.Ports;
 using EquipFlow.Application.Budget.Services;
 using EquipFlow.Application.CostGovernor.Queries;
@@ -88,6 +89,7 @@ builder.Services.AddScoped<IUserBudgetRepository, UserBudgetRepository>();
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddScoped<IDocumentChunkRepository, DocumentChunkRepository>();
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
+builder.Services.AddScoped<SequentialSupervisorOrchestrator>();
 builder.Services.AddRagSearchInfrastructure();
 builder.Services.AddLLMProviders(builder.Configuration);
 builder.Services.AddEquipFlowTools();
@@ -132,6 +134,7 @@ app.MapGet("/weatherforecast", () =>
 app.MapCostGovernorEndpoints();
 app.MapDocumentsEndpoints();
 app.MapSearchEndpoints();
+app.MapAiEndpoints();
 
 app.Run();
 
