@@ -1,20 +1,20 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Security.Claims;
-using System.Text;
 using EquipFlow.Application.Search.Queries;
 using EquipFlow.Domain.Search;
+using EquipFlow.WebApi.IntegrationTests.Documents;
 using FluentAssertions;
 using MediatR;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
 
@@ -95,8 +95,9 @@ public sealed class SearchEndpointTests : IClassFixture<SearchWebApplicationFact
             Content = JsonContent.Create(new { queryText, topK = 3 })
         };
         request.Headers.Authorization = new AuthenticationHeaderValue(
-            "Bearer",
-            SearchWebApplicationFactory.CreateToken(role));
+            JwtBearerDefaults.AuthenticationScheme,
+            "test-token");
+        request.Headers.Add(TestAuthHandler.RoleHeader, role);
         return request;
     }
 
@@ -140,6 +141,15 @@ public sealed class SearchWebApplicationFactory : WebApplicationFactory<Program>
         });
         builder.ConfigureTestServices(services =>
         {
+            services.RemoveAll<IConfigureOptions<AuthenticationOptions>>();
+            services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            }).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(
+                JwtBearerDefaults.AuthenticationScheme,
+                _ => { });
+
             services.RemoveAll<ISender>();
 
             var sender = Substitute.For<ISender>();
@@ -167,24 +177,5 @@ public sealed class SearchWebApplicationFactory : WebApplicationFactory<Program>
 
             services.AddSingleton<ISender>(sender);
         });
-    }
-
-    public static string CreateToken(string role)
-    {
-        var credentials = new SigningCredentials(
-            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(SigningKey)),
-            SecurityAlgorithms.HmacSha256);
-        var token = new JwtSecurityToken(
-            issuer: Issuer,
-            audience: Audience,
-            claims:
-            [
-                new Claim(ClaimTypes.NameIdentifier, "integration-test-user"),
-                new Claim(ClaimTypes.Role, role)
-            ],
-            expires: DateTime.UtcNow.AddMinutes(5),
-            signingCredentials: credentials);
-
-        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 }
