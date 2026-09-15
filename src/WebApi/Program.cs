@@ -57,6 +57,7 @@ builder.Services.AddScoped<IDocumentChunkRepository, DocumentChunkRepository>();
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
 builder.Services.AddRagSearchInfrastructure();
 builder.Services.AddLLMProviders(builder.Configuration);
+builder.Services.AddEquipFlowTools();
 
 var app = builder.Build();
 
