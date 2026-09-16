@@ -75,7 +75,7 @@ public sealed record GetEquipmentSpecsResponse(
 /// </summary>
 public sealed record GenerateSafetyChecklistRequest(
     Guid EquipmentId,
-    IReadOnlyList<string> Faults);
+  string TaskDescription);
 
 /// <summary>
 /// Response containing a generated safety checklist.
@@ -86,7 +86,19 @@ public sealed record GenerateSafetyChecklistResponse(
     /// <summary>
     /// An item in the generated safety checklist.
     /// </summary>
-    public sealed record ChecklistItem(string Description, bool IsMandatory);
+    public sealed record ChecklistItem(
+      string Description,
+      bool IsMandatory,
+      ChecklistCitation Citation);
+
+    /// <summary>
+    /// Citation metadata for a safety checklist item.
+    /// </summary>
+    public sealed record ChecklistCitation(
+      Guid DocumentId,
+      string DocumentTitle,
+      int? Page,
+      string? Section);
 }
 
 /// <summary>
@@ -170,14 +182,11 @@ public static class ToolSchemas
               "type": "string",
               "format": "uuid"
             },
-            "faults": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
+            "taskDescription": {
+              "type": "string"
             }
           },
-          "required": ["equipmentId", "faults"]
+          "required": ["equipmentId", "taskDescription"]
         }
         """;
 }
