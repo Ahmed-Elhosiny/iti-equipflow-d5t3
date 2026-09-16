@@ -49,4 +49,27 @@ public sealed class StaticAgentToolRegistryTests
         var registry = new StaticAgentToolRegistry();
         Assert.False(registry.IsToolAllowed("WorkOrderGenerator", "QueryFaultHistory"));
     }
+
+    // --- GenerateSafetyChecklist Tests ---
+
+    [Fact]
+    public void DiagnosticSafetyPlanner_AllowsGenerateSafetyChecklist()
+    {
+        var registry = new StaticAgentToolRegistry();
+        Assert.True(registry.IsToolAllowed("DiagnosticSafetyPlanner", "GenerateSafetyChecklist"));
+    }
+
+    [Fact]
+    public void SymptomMatcher_DoesNotAllowGenerateSafetyChecklist()
+    {
+        var registry = new StaticAgentToolRegistry();
+        Assert.False(registry.IsToolAllowed("SymptomMatcher", "GenerateSafetyChecklist"));
+    }
+
+    [Fact]
+    public void WorkOrderGenerator_DoesNotAllowGenerateSafetyChecklist()
+    {
+        var registry = new StaticAgentToolRegistry();
+        Assert.False(registry.IsToolAllowed("WorkOrderGenerator", "GenerateSafetyChecklist"));
+    }
 }
