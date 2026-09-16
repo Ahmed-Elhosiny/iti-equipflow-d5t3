@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using EquipFlow.Domain.Budget;
 using EquipFlow.Domain;
 using EquipFlow.Domain.Entities;
+using EquipFlow.Infrastructure.Persistence.Configurations;
 using EquipFlow.Infrastructure.Persistence.Entities;
 namespace EquipFlow.Infrastructure.Persistence;
 
@@ -23,6 +24,7 @@ public class EquipFlowDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.ApplyConfiguration(new EquipmentConfiguration());
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(EquipFlowDbContext).Assembly);
         if (Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory")
         {
