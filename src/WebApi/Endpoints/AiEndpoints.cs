@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using EquipFlow.Application.Agentic.Abstractions;
+using EquipFlow.Application.Agentic.Contracts;
 using EquipFlow.Application.Agentic.Orchestration;
 using EquipFlow.WebApi.Middleware;
 
@@ -16,7 +17,7 @@ public static class AiEndpoints
                 "Technician",
                 "Engineer",
                 "Manager"))
-            .Produces<WorkflowResult>(StatusCodes.Status200OK)
+            .Produces<AnalyzeMaintenanceResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status402PaymentRequired)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -62,7 +63,7 @@ public static class AiEndpoints
         {
             WorkflowStatus.PendingApproval
                 or WorkflowStatus.PartialSuccess
-                or WorkflowStatus.Cached => Results.Ok(workflowResult),
+                or WorkflowStatus.Cached => Results.Ok(ToResponse(workflowResult)),
             WorkflowStatus.Blocked => Results.Problem(
                 statusCode: StatusCodes.Status402PaymentRequired,
                 title: "Budget Exhausted",
@@ -77,9 +78,30 @@ public static class AiEndpoints
         };
     }
 
+    private static AnalyzeMaintenanceResponse ToResponse(WorkflowResult result) =>
+        new(
+            result.Status,
+            result.Draft,
+            result.DiagnosticPlan,
+            result.ErrorMessage,
+            result.ReasonCode,
+            result.EstimatedCost,
+            result.RemainingBudget,
+            result.CachedResponse);
+
     private sealed record AgentContext(string CorrelationId, string UserId) : IAgentContext;
 }
 
 public record AnalyzeMaintenanceRequest(
     string SymptomDescription,
     string? EquipmentIdHint = null);
+
+public record AnalyzeMaintenanceResponse(
+    WorkflowStatus Status,
+    WorkOrderOutput? Draft = null,
+    DiagnosticPlanOutput? DiagnosticPlan = null,
+    string? ErrorMessage = null,
+    string? ReasonCode = null,
+    decimal? EstimatedCost = null,
+    decimal? RemainingBudget = null,
+    string? CachedResponse = null);
