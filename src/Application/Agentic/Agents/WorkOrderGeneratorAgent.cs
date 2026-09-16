@@ -196,7 +196,7 @@ public sealed class WorkOrderGeneratorAgent(
             using var document = JsonDocument.Parse(resultJson ?? throw new JsonException("Budget result was empty."));
             if (!document.RootElement.TryGetProperty("IsApproved", out var isApproved) || !isApproved.GetBoolean())
             {
-                error = document.RootElement.TryGetProperty("RejectionReason", out var reason)
+                error = document.RootElement.TryGetProperty("Reason", out var reason)
                     ? reason.GetString() ?? error
                     : error;
                 return false;

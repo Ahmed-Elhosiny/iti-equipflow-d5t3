@@ -19,15 +19,18 @@ public sealed record CreateWorkOrderResponse(Guid WorkOrderId, string Status);
 /// <summary>
 /// Request for validating an estimated work order cost with the Cost Governor.
 /// </summary>
-public sealed record ValidateBudgetRequest(Guid EquipmentId, decimal EstimatedCost);
+public sealed record ValidateBudgetRequest(
+  Guid EquipmentId,
+  int? EstimatedTokens = null,
+  decimal? EstimatedCost = null);
 
 /// <summary>
 /// Response from the Cost Governor budget validation.
 /// </summary>
 public sealed record ValidateBudgetResponse(
-    bool IsWithinBudget,
-    decimal RemainingBudget,
-    string? RejectionReason);
+  bool IsApproved,
+  decimal ReservedAmount,
+  string? Reason);
 
 /// <summary>
 /// Request for checking a work order's Approval Gate status.
@@ -119,11 +122,23 @@ public static class WorkflowToolSchemas
               "type": "string",
               "format": "uuid"
             },
+            "estimatedTokens": {
+              "type": "integer",
+              "minimum": 1
+            },
             "estimatedCost": {
-              "type": "number"
+              "type": "number",
+              "minimum": 0
             }
           },
-          "required": ["equipmentId", "estimatedCost"]
+          "required": ["equipmentId"],
+          "oneOf": [
+            { "required": ["estimatedTokens"] },
+            { "required": ["estimatedCost"] }
+          ],
+          "not": {
+            "required": ["estimatedTokens", "estimatedCost"]
+          }
         }
         """;
 
