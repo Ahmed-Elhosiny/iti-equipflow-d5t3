@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using EquipFlow.Domain.Budget;
+using EquipFlow.Domain;
 using EquipFlow.Domain.Entities;
+using EquipFlow.Infrastructure.Persistence.Configurations;
 using EquipFlow.Infrastructure.Persistence.Entities;
 namespace EquipFlow.Infrastructure.Persistence;
 
@@ -12,6 +14,7 @@ public class EquipFlowDbContext : DbContext
     }
 
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
+    public DbSet<Equipment> Equipments { get; set; } = null!;
     public DbSet<SafetyPrerequisite> SafetyPrerequisites => Set<SafetyPrerequisite>();
     public DbSet<ApprovalAction> ApprovalActions => Set<ApprovalAction>();
     public DbSet<UserBudget> UserBudgets { get; set; } = null!;
@@ -21,6 +24,7 @@ public class EquipFlowDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.ApplyConfiguration(new EquipmentConfiguration());
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(EquipFlowDbContext).Assembly);
         if (Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory")
         {
