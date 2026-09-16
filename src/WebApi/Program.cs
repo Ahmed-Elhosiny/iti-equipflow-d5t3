@@ -103,9 +103,15 @@ builder.Services.AddScoped<PdfDocumentExtractor>();
 builder.Services.AddScoped<DocxDocumentExtractor>();
 builder.Services.AddScoped<IDocumentExtractor>(serviceProvider =>
     serviceProvider.GetRequiredService<PdfDocumentExtractor>());
-builder.Services.AddScoped<IAgent<SymptomMatchInput, SymptomMatchOutput>, SymptomMatcherAgent>();
-builder.Services.AddScoped<IAgent<DiagnosticPlanInput, DiagnosticPlanOutput>, DiagnosticSafetyPlannerAgent>();
-builder.Services.AddScoped<IAgent<WorkOrderInput, WorkOrderOutput>, WorkOrderGeneratorAgent>();
+builder.Services.AddScoped<SymptomMatcherAgent>();
+builder.Services.AddScoped<IAgent<SymptomMatchInput, SymptomMatchOutput>>(serviceProvider =>
+    serviceProvider.GetRequiredService<SymptomMatcherAgent>());
+builder.Services.AddScoped<DiagnosticSafetyPlannerAgent>();
+builder.Services.AddScoped<IAgent<DiagnosticPlanInput, DiagnosticPlanOutput>>(serviceProvider =>
+    serviceProvider.GetRequiredService<DiagnosticSafetyPlannerAgent>());
+builder.Services.AddScoped<WorkOrderGeneratorAgent>();
+builder.Services.AddScoped<IAgent<WorkOrderInput, WorkOrderOutput>>(serviceProvider =>
+    serviceProvider.GetRequiredService<WorkOrderGeneratorAgent>());
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
 builder.Services.AddScoped<SequentialSupervisorOrchestrator>();
 builder.Services.AddRagSearchInfrastructure();
