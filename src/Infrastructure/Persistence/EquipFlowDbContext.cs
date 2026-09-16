@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using EquipFlow.Domain.Budget;
+using EquipFlow.Domain;
 using EquipFlow.Domain.Entities;
 using EquipFlow.Infrastructure.Persistence.Entities;
 namespace EquipFlow.Infrastructure.Persistence;
@@ -12,6 +13,7 @@ public class EquipFlowDbContext : DbContext
     }
 
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
+    public DbSet<Equipment> Equipments { get; set; } = null!;
     public DbSet<SafetyPrerequisite> SafetyPrerequisites => Set<SafetyPrerequisite>();
     public DbSet<ApprovalAction> ApprovalActions => Set<ApprovalAction>();
     public DbSet<UserBudget> UserBudgets { get; set; } = null!;

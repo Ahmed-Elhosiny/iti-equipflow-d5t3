@@ -94,6 +94,7 @@ builder.Services.AddDbContext<EquipFlowDbContext>(options =>
 builder.Services.AddScoped<IAgentEventStore, AgentEventStore>();
 builder.Services.AddScoped<IUserBudgetRepository, UserBudgetRepository>();
 builder.Services.AddScoped<IWorkOrderRepository, WorkOrderRepository>();
+builder.Services.AddScoped<IEquipmentRepository, EquipmentRepository>();
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddScoped<IDocumentChunkRepository, DocumentChunkRepository>();
 builder.Services.AddScoped<ITextChunker, SimpleTextChunker>();
