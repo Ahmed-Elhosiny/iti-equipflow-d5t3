@@ -3,6 +3,7 @@ using System.Text.Json;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Tools.Definitions;
 using EquipFlow.Application.Tools.Ports;
+using Microsoft.Extensions.Logging;
 
 namespace EquipFlow.Infrastructure.Tools.Executors;
 
@@ -10,8 +11,12 @@ namespace EquipFlow.Infrastructure.Tools.Executors;
 /// Executes the <c>validate_budget</c> tool.
 /// </summary>
 /// <param name="costGovernor">The Cost Governor used to validate the estimated cost.</param>
-public sealed class ValidateBudgetExecutor(ICostGovernor costGovernor) : IToolExecutor
+public sealed class ValidateBudgetExecutor(
+    ICostGovernor costGovernor,
+    ILogger<ValidateBudgetExecutor> logger) : IToolExecutor
 {
+    private const decimal DefaultPricePerThousandTokens = 0.01m;
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -57,19 +62,42 @@ public sealed class ValidateBudgetExecutor(ICostGovernor costGovernor) : IToolEx
                     "The validate_budget invocation is missing a user context.");
             }
 
-            var budgetCheck = await costGovernor.CheckBudgetAsync(
-                userId,
-                new EstimatedCost(request.EstimatedCost, 0, 0),
-                cancellationToken);
+            CostGovernorResult budgetResult;
+            if (request.EstimatedTokens is int estimatedTokens)
+            {
+                budgetResult = await costGovernor.EstimateAndReserveAsync(
+                    userId,
+                    estimatedTokens,
+                    DefaultPricePerThousandTokens,
+                    cancellationToken);
+            }
+            else if (request.EstimatedCost is decimal estimatedCost)
+            {
+                var budgetCheck = await costGovernor.CheckBudgetAsync(
+                    userId,
+                    new EstimatedCost(estimatedCost, 0, 0),
+                    cancellationToken);
+
+                return new ToolExecutionResult(
+                    true,
+                    JsonSerializer.Serialize(new ValidateBudgetResponse(
+                        budgetCheck.IsAllowed,
+                        budgetCheck.IsAllowed ? estimatedCost : 0,
+                        budgetCheck.Reason)),
+                    null);
+            }
+            else
+            {
+                throw new ValidationException(
+                    "Exactly one of estimatedTokens or estimatedCost must be provided.");
+            }
 
             return new ToolExecutionResult(
                 true,
-                JsonSerializer.Serialize(new
-                {
-                    IsApproved = budgetCheck.IsAllowed,
-                    EstimatedCost = request.EstimatedCost,
-                    RejectionReason = budgetCheck.Reason
-                }),
+                JsonSerializer.Serialize(new ValidateBudgetResponse(
+                    budgetResult.Status != CostGovernorStatus.Blocked,
+                    budgetResult.Status == CostGovernorStatus.Blocked ? 0 : budgetResult.EstimatedCost,
+                    budgetResult.Status == CostGovernorStatus.Blocked ? budgetResult.Reason : null)),
                 null);
         }
         catch (JsonException exception)
@@ -85,30 +113,56 @@ public sealed class ValidateBudgetExecutor(ICostGovernor costGovernor) : IToolEx
         }
         catch (Exception exception)
         {
+            logger.LogError(exception, "ValidateBudget execution failed for user {UserId}.", userId);
             return new ToolExecutionResult(false, null, exception.Message);
         }
     }
 
     /// <inheritdoc />
-    async Task<ToolDispatchResult> IToolExecutor.ExecuteAsync(
+    public async Task<ToolDispatchResult> ExecuteAsync(
         ToolInvocationRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var document = JsonDocument.Parse(request.ArgumentsJson);
-        var result = await ExecuteAsync(
-            document.RootElement,
-            request.Context.UserId.ToString(),
-            cancellationToken);
+        try
+        {
+            using var document = JsonDocument.Parse(request.ArgumentsJson);
+            var result = await ExecuteAsync(
+                document.RootElement,
+                request.Context.UserId.ToString(),
+                cancellationToken);
 
-        return new ToolDispatchResult(
-            request.ToolName,
-            result.Succeeded,
-            result.Succeeded ? ToolDispatchStatus.Success : ToolDispatchStatus.ExecutorFailed,
-            result.Result,
-            result.Succeeded ? null : "VALIDATE_BUDGET_FAILED",
-            result.Error);
+            return new ToolDispatchResult(
+                request.ToolName,
+                result.Succeeded,
+                result.Succeeded ? ToolDispatchStatus.Success : ToolDispatchStatus.ExecutorFailed,
+                result.Result,
+                result.Succeeded ? null : "VALIDATE_BUDGET_FAILED",
+                result.Error);
+        }
+        catch (JsonException exception)
+        {
+            logger.LogWarning(exception, "ValidateBudget received invalid JSON.");
+            return new ToolDispatchResult(
+                request.ToolName,
+                false,
+                ToolDispatchStatus.ExecutorFailed,
+                null,
+                "VALIDATE_BUDGET_FAILED",
+                $"The validate_budget arguments are invalid: {exception.Message}");
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "ValidateBudget dispatch failed.");
+            return new ToolDispatchResult(
+                request.ToolName,
+                false,
+                ToolDispatchStatus.ExecutorFailed,
+                null,
+                "VALIDATE_BUDGET_FAILED",
+                exception.Message);
+        }
     }
 }

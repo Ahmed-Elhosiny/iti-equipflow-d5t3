@@ -72,4 +72,11 @@ public sealed class StaticAgentToolRegistryTests
         var registry = new StaticAgentToolRegistry();
         Assert.False(registry.IsToolAllowed("WorkOrderGenerator", "GenerateSafetyChecklist"));
     }
+
+    [Fact]
+    public void WorkOrderGenerator_AllowsValidateBudget()
+    {
+        var registry = new StaticAgentToolRegistry();
+        Assert.True(registry.IsToolAllowed("WorkOrderGenerator", "ValidateBudget"));
+    }
 }
