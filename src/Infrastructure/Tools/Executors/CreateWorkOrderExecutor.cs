@@ -5,14 +5,18 @@ using EquipFlow.Application.Tools.Definitions;
 using EquipFlow.Application.Tools.Ports;
 using EquipFlow.Application.WorkOrders.Commands;
 using MediatR;
+using Microsoft.Extensions.Logging;
 
 namespace EquipFlow.Infrastructure.Tools.Executors;
 
 /// <summary>
 /// Executes the <c>create_work_order</c> tool.
 /// </summary>
-/// <param name="workOrderCommandPort">The application port used to create work orders.</param>
-public sealed class CreateWorkOrderExecutor(ISender sender) : IToolExecutor
+/// <param name="sender">The mediator used to create work orders.</param>
+/// <param name="logger">The logger used to record execution failures.</param>
+public sealed class CreateWorkOrderExecutor(
+    ISender sender,
+    ILogger<CreateWorkOrderExecutor> logger) : IToolExecutor
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -33,6 +37,12 @@ public sealed class CreateWorkOrderExecutor(ISender sender) : IToolExecutor
     public async Task<ToolExecutionResult> ExecuteAsync(
         JsonElement arguments,
         CancellationToken cancellationToken = default)
+        => await ExecuteAsync(arguments, null, cancellationToken);
+
+    private async Task<ToolExecutionResult> ExecuteAsync(
+        JsonElement arguments,
+        string? userId,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -49,12 +59,17 @@ public sealed class CreateWorkOrderExecutor(ISender sender) : IToolExecutor
                 request.Title,
                 request.Description,
                 request.EquipmentId.ToString(),
-                request.EquipmentId.ToString());
-            var workOrderId = (Guid)(await sender.Send(command, cancellationToken))!;
+                userId ?? string.Empty);
+            var workOrderResult = await sender.Send(command, cancellationToken);
+            if (workOrderResult is not Guid workOrderId)
+            {
+                throw new InvalidOperationException(
+                    "The create_work_order handler did not return a work order identifier.");
+            }
 
             return new ToolExecutionResult(
                 true,
-                JsonSerializer.Serialize(new { WorkOrderId = workOrderId }),
+                JsonSerializer.Serialize(new CreateWorkOrderResponse(workOrderId, "Created")),
                 null);
         }
         catch (JsonException exception)
@@ -70,27 +85,56 @@ public sealed class CreateWorkOrderExecutor(ISender sender) : IToolExecutor
         }
         catch (Exception exception)
         {
+            logger.LogError(exception, "CreateWorkOrder execution failed for user {UserId}.", userId);
             return new ToolExecutionResult(false, null, exception.Message);
         }
     }
 
     /// <inheritdoc />
-    async Task<ToolDispatchResult> IToolExecutor.ExecuteAsync(
+    public async Task<ToolDispatchResult> ExecuteAsync(
         ToolInvocationRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var document = JsonDocument.Parse(request.ArgumentsJson);
-        var result = await ExecuteAsync(document.RootElement, cancellationToken);
+        try
+        {
+            using var document = JsonDocument.Parse(request.ArgumentsJson);
+            var result = await ExecuteAsync(
+                document.RootElement,
+                request.Context.UserId.ToString(),
+                cancellationToken);
 
-        return new ToolDispatchResult(
-            request.ToolName,
-            result.Succeeded,
-            result.Succeeded ? ToolDispatchStatus.Success : ToolDispatchStatus.ExecutorFailed,
-            result.Result,
-            result.Succeeded ? null : "CREATE_WORK_ORDER_FAILED",
-            result.Error);
+            return new ToolDispatchResult(
+                request.ToolName,
+                result.Succeeded,
+                result.Succeeded ? ToolDispatchStatus.Success : ToolDispatchStatus.ExecutorFailed,
+                result.Result,
+                result.Succeeded ? null : "CREATE_WORK_ORDER_FAILED",
+                result.Error);
+        }
+        catch (JsonException exception)
+        {
+            logger.LogWarning(exception, "CreateWorkOrder received invalid JSON.");
+            return new ToolDispatchResult(
+                request.ToolName,
+                false,
+                ToolDispatchStatus.ExecutorFailed,
+                null,
+                "CREATE_WORK_ORDER_FAILED",
+                $"The create_work_order arguments are invalid: {exception.Message}");
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "CreateWorkOrder dispatch failed.");
+            return new ToolDispatchResult(
+                request.ToolName,
+                false,
+                ToolDispatchStatus.ExecutorFailed,
+                null,
+                "CREATE_WORK_ORDER_FAILED",
+                exception.Message);
+        }
     }
 }
