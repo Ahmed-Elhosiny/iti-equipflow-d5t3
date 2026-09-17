@@ -26,6 +26,7 @@ public enum SubCategory
     OutOfCorpus,
     Ambiguity,
     IndirectInjection,
+    DirectInjection,
     ConflictingSources,
     InsufficientEvidence,
     Normal
@@ -33,7 +34,7 @@ public enum SubCategory
 
 public sealed class GoldenSetTests
 {
-    [Fact]
+        [Fact]
     public void GoldenSet_ShouldMeetMinimumRequirements()
     {
         var json = File.ReadAllText("golden-set.json");
@@ -44,8 +45,26 @@ public sealed class GoldenSetTests
         });
 
         cases.Should().NotBeNull();
+
+        // EVAL-001: >= 25 Q/A cases
         cases!.Count.Should().BeGreaterThanOrEqualTo(25);
-        cases.Count(caseItem => caseItem.CaseType == CaseType.Adversarial).Should().BeGreaterThanOrEqualTo(5);
-        cases.Count(caseItem => caseItem.CaseType == CaseType.Injection).Should().BeGreaterThanOrEqualTo(3);
+
+        // EVAL-002: >= 5 adversarial cases
+        cases.Count(c => c.CaseType == CaseType.Adversarial).Should().BeGreaterThanOrEqualTo(5);
+
+        // EVAL-003: >= 3 prompt-injection cases
+        cases.Count(c => c.CaseType == CaseType.Injection).Should().BeGreaterThanOrEqualTo(3);
+
+        // EVAL-003: indirect injection in an ingested document must be present
+        cases.Count(c => c.SubCategory == SubCategory.IndirectInjection).Should().BeGreaterThanOrEqualTo(1);
+
+        // EVAL-002: out-of-corpus coverage must be present
+        cases.Count(c => c.SubCategory == SubCategory.OutOfCorpus).Should().BeGreaterThanOrEqualTo(1);
+
+        // Dataset integrity: unique, non-empty identifiers and content
+        cases.Select(c => c.Id).Should().OnlyHaveUniqueItems();
+        cases.Should().OnlyContain(c => !string.IsNullOrWhiteSpace(c.Id)
+                                     && !string.IsNullOrWhiteSpace(c.Query)
+                                     && !string.IsNullOrWhiteSpace(c.ExpectedOutcome));
     }
 }
