@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 namespace EquipFlow.Infrastructure.Tools.Executors;
 
 /// <summary>
-/// Executes the <c>create_work_order</c> tool.
+/// Executes the <c>CreateWorkOrder</c> tool.
 /// </summary>
 /// <param name="sender">The mediator used to create work orders.</param>
 /// <param name="logger">The logger used to record execution failures.</param>
@@ -26,7 +26,7 @@ public sealed class CreateWorkOrderExecutor(
     /// <summary>
     /// Gets the name of the tool handled by this executor.
     /// </summary>
-    public string ToolName => "create_work_order";
+    public string ToolName => "CreateWorkOrder";
 
     /// <summary>
     /// Deserializes the tool arguments and creates a work order through the application layer.
@@ -52,7 +52,7 @@ public sealed class CreateWorkOrderExecutor(
                 return new ToolExecutionResult(
                     false,
                     null,
-                    "The create_work_order arguments could not be deserialized.");
+                    "The CreateWorkOrder arguments could not be deserialized.");
             }
 
             var command = new CreateWorkOrderCommand(
@@ -64,7 +64,7 @@ public sealed class CreateWorkOrderExecutor(
             if (workOrderResult is not Guid workOrderId)
             {
                 throw new InvalidOperationException(
-                    "The create_work_order handler did not return a work order identifier.");
+                    "The CreateWorkOrder handler did not return a work order identifier.");
             }
 
             return new ToolExecutionResult(
@@ -77,7 +77,7 @@ public sealed class CreateWorkOrderExecutor(
             return new ToolExecutionResult(
                 false,
                 null,
-                $"The create_work_order arguments are invalid: {exception.Message}");
+                $"The CreateWorkOrder arguments are invalid: {exception.Message}");
         }
         catch (ValidationException exception)
         {
@@ -111,7 +111,7 @@ public sealed class CreateWorkOrderExecutor(
                 result.Succeeded,
                 result.Succeeded ? ToolDispatchStatus.Success : ToolDispatchStatus.ExecutorFailed,
                 result.Result,
-                result.Succeeded ? null : "CREATE_WORK_ORDER_FAILED",
+                result.Succeeded ? null : "CreateWorkOrder_FAILED",
                 result.Error);
         }
         catch (JsonException exception)
@@ -122,8 +122,8 @@ public sealed class CreateWorkOrderExecutor(
                 false,
                 ToolDispatchStatus.ExecutorFailed,
                 null,
-                "CREATE_WORK_ORDER_FAILED",
-                $"The create_work_order arguments are invalid: {exception.Message}");
+                "CreateWorkOrder_FAILED",
+                $"The CreateWorkOrder arguments are invalid: {exception.Message}");
         }
         catch (Exception exception)
         {
@@ -133,7 +133,7 @@ public sealed class CreateWorkOrderExecutor(
                 false,
                 ToolDispatchStatus.ExecutorFailed,
                 null,
-                "CREATE_WORK_ORDER_FAILED",
+                "CreateWorkOrder_FAILED",
                 exception.Message);
         }
     }
