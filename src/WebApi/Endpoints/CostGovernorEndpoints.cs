@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using EquipFlow.Application.CostGovernor.Queries;
 using MediatR;
 
@@ -14,8 +13,14 @@ public static class CostGovernorEndpoints
     /// </summary>
     public static IEndpointRouteBuilder MapCostGovernorEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/budgets/me", GetMyBudget)
+        endpoints.MapGet("/api/budget/me", GetMyBudget)
             .WithName("GetMyBudget")
+            .WithSummary("Retrieves the current budget status for the authenticated user.")
+            .WithDescription("Retrieves the current budget status for the authenticated user.")
+            .RequireAuthorization();
+
+        endpoints.MapGet("/api/budgets/me", GetMyBudget)
+            .WithName("GetMyBudgetLegacy")
             .WithSummary("Get the authenticated user's budget")
             .WithDescription("Returns the budget and recent spend for the authenticated user.")
             .RequireAuthorization();
@@ -33,20 +38,27 @@ public static class CostGovernorEndpoints
     /// Gets the budget belonging to the authenticated user.
     /// </summary>
     private static async Task<IResult> GetMyBudget(
-        ClaimsPrincipal user,
+        HttpContext httpContext,
         ISender sender,
         CancellationToken cancellationToken)
     {
-        var userIdClaim = user.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? user.FindFirstValue("sub");
-
-        if (!Guid.TryParse(userIdClaim, out var userId))
+        var userId = httpContext.User.GetUserId();
+        if (!userId.HasValue)
         {
             return TypedResults.Unauthorized();
         }
 
-        var budget = await sender.Send(new GetMyBudgetQuery(userId), cancellationToken);
-        return TypedResults.Ok(budget);
+        try
+        {
+            var budget = await sender.Send(new GetMyBudgetQuery(userId.Value), cancellationToken);
+            return budget is null
+                ? TypedResults.NotFound()
+                : TypedResults.Ok(budget);
+        }
+        catch (InvalidOperationException)
+        {
+            return TypedResults.NotFound();
+        }
     }
 
     /// <summary>
