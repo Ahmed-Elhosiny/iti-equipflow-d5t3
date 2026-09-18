@@ -1,3 +1,5 @@
+using EquipFlow.Domain.Budget.ValueObjects;
+
 namespace EquipFlow.Application.Ports.LLM;
 
 /// <summary>
@@ -8,9 +10,11 @@ namespace EquipFlow.Application.Ports.LLM;
 /// <param name="FinishReason">The reason generation finished.</param>
 /// <param name="PromptTokens">The number of tokens in the prompt.</param>
 /// <param name="CompletionTokens">The number of tokens in the completion.</param>
+/// <param name="Usage">The actual token usage, when provided by the model provider.</param>
 public sealed record LLMResult(
     string? Content,
     IReadOnlyList<ToolCall>? ToolCalls,
     string FinishReason,
     int PromptTokens,
-    int CompletionTokens);
+    int CompletionTokens,
+    TokenUsage? Usage = null);

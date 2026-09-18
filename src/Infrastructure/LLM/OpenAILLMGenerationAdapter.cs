@@ -1,5 +1,6 @@
 using EquipFlow.Application.Options;
 using EquipFlow.Application.Ports.LLM;
+using EquipFlow.Domain.Budget.ValueObjects;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenAI;
@@ -89,7 +90,12 @@ public sealed class OpenAILLMGenerationAdapter : ILLMGenerationPort
                 toolCalls,
                 response.FinishReason.ToString(),
                 response.Usage?.InputTokenCount ?? 0,
-                response.Usage?.OutputTokenCount ?? 0);
+                response.Usage?.OutputTokenCount ?? 0,
+                response.Usage is null
+                    ? null
+                    : TokenUsage.FromActual(
+                        response.Usage.InputTokenCount,
+                        response.Usage.OutputTokenCount));
         }
         catch (OperationCanceledException)
         {
