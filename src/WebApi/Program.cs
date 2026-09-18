@@ -163,7 +163,7 @@ app.MapWorkOrderEndpoints();
 
 app.Run();
 
-// public partial class Program;
+public partial class Program;
 
 file sealed class ConfiguredLlmProvider(
     EquipFlow.Application.Ports.LLM.ILLMProviderFactory providerFactory,
