@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: pgvector/pgvector:pg18
@@ -11,7 +9,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U equipflow -d equipflow"]
       interval: 10s
