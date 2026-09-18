@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using EquipFlow.Application.Options;
 using EquipFlow.Application.Ports.LLM;
+using EquipFlow.Domain.Budget.ValueObjects;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -113,7 +114,8 @@ public sealed class OllamaLLMGenerationAdapter : ILLMGenerationPort
                 toolCalls,
                 toolCalls is not null ? "tool_calls" : "stop",
                 result.PromptEvalCount,
-                result.EvalCount);
+                result.EvalCount,
+                TokenUsage.FromActual(result.PromptEvalCount, result.EvalCount));
         }
         catch (OperationCanceledException)
         {

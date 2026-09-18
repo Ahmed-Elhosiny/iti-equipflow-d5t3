@@ -5,6 +5,7 @@ using EquipFlow.Application.Ports;
 using EquipFlow.Domain.Budget;
 using EquipFlow.Domain.Budget.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
+using BudgetTokenUsage = EquipFlow.Domain.Budget.ValueObjects.TokenUsage;
 
 namespace EquipFlow.Application.Tests;
 
@@ -54,6 +55,48 @@ public sealed class CostGovernorServiceTests
         Assert.Equal("budget_exhausted", result.Reason);
         Assert.Equal(0.018m, result.EstimatedCost);
         Assert.Equal(0.01m, result.RemainingBudget);
+    }
+
+    [Fact]
+    public async Task ReconcileAsync_WhenActualCostLessThanEstimated_RefundsDifference()
+    {
+        var userId = Guid.NewGuid();
+        var budget = new UserBudget(userId, Money.FromDecimal(1m));
+        var repository = new FakeUserBudgetRepository(budget);
+        var service = CreateService(repository, new FakeModelRouter(null));
+
+        var reservation = await service.EstimateAndReserveAsync(userId.ToString(), 1000, 0.01m);
+
+        var reconciled = await service.ReconcileAsync(
+            reservation.ReservationId!.Value.ToString(),
+            BudgetTokenUsage.FromActual(100, 100),
+            "gpt-4o-mini");
+
+        Assert.True(reconciled);
+        Assert.Equal(0.000075m, budget.ConsumedAmount.Amount);
+        Assert.Equal(0.999925m, budget.AvailableAmount.Amount);
+        Assert.Empty(budget.Reservations);
+    }
+
+    [Fact]
+    public async Task ReconcileAsync_WhenActualCostMoreThanEstimated_ChargesExtra()
+    {
+        var userId = Guid.NewGuid();
+        var budget = new UserBudget(userId, Money.FromDecimal(1m));
+        var repository = new FakeUserBudgetRepository(budget);
+        var service = CreateService(repository, new FakeModelRouter(null));
+
+        var reservation = await service.EstimateAndReserveAsync(userId.ToString(), 1000, 0.0001m);
+
+        var reconciled = await service.ReconcileAsync(
+            reservation.ReservationId!.Value.ToString(),
+            BudgetTokenUsage.FromActual(1000, 1000),
+            "gpt-4o-mini");
+
+        Assert.True(reconciled);
+        Assert.Equal(0.00075m, budget.ConsumedAmount.Amount);
+        Assert.Equal(0.99925m, budget.AvailableAmount.Amount);
+        Assert.Empty(budget.Reservations);
     }
 
     private static CostGovernorService CreateService(

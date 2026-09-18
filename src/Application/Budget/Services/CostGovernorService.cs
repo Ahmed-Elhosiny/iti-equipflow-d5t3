@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Budget.Ports;
 using EquipFlow.Application.Ports;
+using EquipFlow.Application.Options;
 using EquipFlow.Domain.Budget;
 using EquipFlow.Domain.Budget.ValueObjects;
 using Microsoft.Extensions.Logging;
@@ -19,6 +20,10 @@ public sealed class CostGovernorService(
     private const decimal MockFallbackRateMultiplier = 0.5m;
     private static readonly Money DefaultBudgetLimit = Money.FromDecimal(10m);
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> ReservationGates = new();
+    private readonly OpenAIOptions _openAIOptions = new(
+        "gpt-4o-mini",
+        string.Empty,
+        null);
 
     public async Task<CostGovernorResult> EstimateAndReserveAsync(
         string userId,
@@ -115,6 +120,69 @@ public sealed class CostGovernorService(
 
     private static Money EstimateCost(int estimatedTokens, decimal pricePerThousandTokens) =>
         Money.FromDecimal(estimatedTokens / 1000m * pricePerThousandTokens * SafetyMargin);
+
+    public async Task<bool> ReconcileAsync(
+        string reservationId,
+        EquipFlow.Domain.Budget.ValueObjects.TokenUsage actualUsage,
+        string modelUsed,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Guid.TryParse(reservationId, out var parsedReservationId))
+        {
+            return false;
+        }
+
+        var budgets = await userBudgetRepository.GetAllAsync(cancellationToken);
+        var budget = budgets.FirstOrDefault(item =>
+            item.Reservations.Any(reservation => reservation.Id == parsedReservationId));
+        if (budget is null)
+        {
+            logger.LogWarning(
+                "Unable to reconcile missing reservation {ReservationId}.",
+                reservationId);
+            return false;
+        }
+
+        var reservationGate = ReservationGates.GetOrAdd(budget.UserId, _ => new SemaphoreSlim(1, 1));
+        await reservationGate.WaitAsync(cancellationToken);
+
+        try
+        {
+            var reservation = budget.Reservations.First(item => item.Id == parsedReservationId);
+            var pricing = _openAIOptions.ModelPricing.TryGetValue(
+                modelUsed,
+                out var modelPricing)
+                ? modelPricing
+                : (_openAIOptions.PromptTokenPricePer1K, _openAIOptions.CompletionTokenPricePer1K);
+            var actualCost = Money.FromDecimal(
+                actualUsage.PromptTokens / 1000m * pricing.Item1
+                + actualUsage.CompletionTokens / 1000m * pricing.Item2);
+
+            if (actualCost > reservation.EstimatedCost
+                && budget.AvailableAmount < actualCost - reservation.EstimatedCost)
+            {
+                logger.LogWarning(
+                    "Unable to reconcile reservation {ReservationId}: insufficient budget for extra cost {ExtraCost} USD.",
+                    reservationId,
+                    (actualCost - reservation.EstimatedCost).Amount);
+                return false;
+            }
+
+            budget.Commit(parsedReservationId, actualCost);
+            await userBudgetRepository.UpdateAsync(budget, cancellationToken);
+            logger.LogInformation(
+                "Reconciled reservation {ReservationId} for model {ModelUsed}: reserved {ReservedAmount} USD, actual {ActualAmount} USD.",
+                reservationId,
+                modelUsed,
+                reservation.EstimatedCost.Amount,
+                actualCost.Amount);
+            return true;
+        }
+        finally
+        {
+            reservationGate.Release();
+        }
+    }
 
     public async Task CommitAsync(
         string userId,

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Agentic.Contracts;
 using EquipFlow.Application.Agentic.Events;
+using EquipFlow.Domain.Budget.ValueObjects;
 using Microsoft.Extensions.Logging;
 
 namespace EquipFlow.Application.Agentic.Orchestration;
@@ -120,7 +121,30 @@ public sealed class SequentialSupervisorOrchestrator(
                 return WorkflowResult.PartialSuccess(diagnosticResult.Output, workOrderResult.Error);
             }
 
-            await costGovernor.CommitAsync(resolvedUserId, reservationId.Value, actualUsageCost: 0.025m, workflowToken);
+            var llmCalls = collectedEvents.OfType<LlmCallCompleted>().ToArray();
+            if (llmCalls.Length == 0)
+            {
+                throw new InvalidOperationException("The workflow completed without recorded LLM usage.");
+            }
+
+            var actualUsage = EquipFlow.Domain.Budget.ValueObjects.TokenUsage.FromActual(
+                llmCalls.Sum(call => call.PromptTokens),
+                llmCalls.Sum(call => call.CompletionTokens));
+            var modelUsed = llmCalls
+                .Select(call => call.ModelIdentifier)
+                .FirstOrDefault(model => !string.IsNullOrWhiteSpace(model) && model != "unknown")
+                ?? reservation.ModelName
+                ?? "gpt-4o-mini";
+            var reconciled = await costGovernor.ReconcileAsync(
+                reservationId.Value.ToString(),
+                actualUsage,
+                modelUsed,
+                workflowToken);
+            if (!reconciled)
+            {
+                throw new InvalidOperationException("The workflow cost could not be reconciled.");
+            }
+
             finalStatus = AgentRunStatus.Success;
             outputSummary = workOrderResult.Output.Summary;
             return WorkflowResult.PendingApproval(workOrderResult.Output);
