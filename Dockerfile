@@ -2,16 +2,14 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-# Copy solution and project files
-# Note: Using .slnx format (new .NET solution format)
-COPY EquipFlow.slnx ./
+# Copy project files for restore
 COPY src/Domain/EquipFlow.Domain.csproj src/Domain/
 COPY src/Application/EquipFlow.Application.csproj src/Application/
 COPY src/Infrastructure/EquipFlow.Infrastructure.csproj src/Infrastructure/
 COPY src/WebApi/EquipFlow.WebApi.csproj src/WebApi/
 
-# Restore dependencies
-RUN dotnet restore
+# Restore dependencies for WebApi only (no tests needed in Docker)
+RUN dotnet restore src/WebApi/EquipFlow.WebApi.csproj
 
 # Copy the rest of the code
 COPY . .
@@ -34,5 +32,4 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 COPY --from=publish /app/publish .
 
 # Default: run API
-# For seed mode, override with: docker compose run --rm seed dotnet EquipFlow.WebApi.dll --seed
 ENTRYPOINT ["dotnet", "EquipFlow.WebApi.dll"]
