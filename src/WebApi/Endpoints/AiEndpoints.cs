@@ -2,7 +2,9 @@ using System.Security.Claims;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Agentic.Contracts;
 using EquipFlow.Application.Agentic.Orchestration;
+using EquipFlow.Application.Agentic.Queries;
 using EquipFlow.WebApi.Middleware;
+using MediatR;
 
 namespace EquipFlow.WebApi.Endpoints;
 
@@ -23,7 +25,29 @@ public static class AiEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        app.MapGet("/api/runs/{runId:guid}", GetAgentRunById)
+            .WithName("GetAgentRunById")
+            .WithTags("Observability")
+            .WithSummary("Inspect an agent run")
+            .WithDescription("Returns the chronological events and outcome for an agent run.")
+            .RequireAuthorization()
+            .Produces<AgentRunDto>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status401Unauthorized);
+
         return app;
+    }
+
+    private static async Task<IResult> GetAgentRunById(
+        Guid runId,
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(
+            new GetAgentRunByIdQuery(runId),
+            cancellationToken);
+
+        return result is null ? Results.NotFound() : Results.Ok(result);
     }
 
     private static async Task<IResult> AnalyzeMaintenance(
