@@ -9,6 +9,7 @@ public static class SearchServiceCollectionExtensions
     public static IServiceCollection AddRagSearchInfrastructure(
         this IServiceCollection services)
     {
+        services.AddScoped<ISearchPort, HybridSearchAdapter>();
         services.AddScoped<IVectorSearchPort, PgVectorSearchAdapter>();
         services.AddScoped<IKeywordSearchPort, PostgresKeywordSearchAdapter>();
         services.AddSingleton<ReciprocalRankFusionService>();
