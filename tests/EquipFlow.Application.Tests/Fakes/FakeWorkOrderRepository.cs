@@ -1,5 +1,6 @@
 using EquipFlow.Application.WorkOrders.Ports;
 using EquipFlow.Domain.Entities;
+using EquipFlow.Domain.Enums;
 
 namespace EquipFlow.Application.Tests.Fakes;
 
@@ -13,6 +14,24 @@ public class FakeWorkOrderRepository : IWorkOrderRepository
         _workOrders.TryGetValue(workOrderId, out var workOrder);
         return Task.FromResult(workOrder);
     }
+
+    public Task<IReadOnlyList<WorkOrder>> GetByUserIdAsync(
+        Guid userId,
+        WorkOrderStatus? statusFilter = null,
+        CancellationToken cancellationToken = default)
+    {
+        IEnumerable<WorkOrder> workOrders = _workOrders.Values
+            .Where(workOrder => workOrder.CreatedBy == userId.ToString());
+        if (statusFilter.HasValue)
+            workOrders = workOrders.Where(workOrder => workOrder.Status == statusFilter.Value);
+        return Task.FromResult<IReadOnlyList<WorkOrder>>(workOrders.ToList());
+    }
+
+    public Task<IReadOnlyList<WorkOrder>> GetByStatusAsync(
+        WorkOrderStatus status,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<WorkOrder>>(
+            _workOrders.Values.Where(workOrder => workOrder.Status == status).ToList());
 
     public Task AddAsync(WorkOrder workOrder, CancellationToken cancellationToken = default)
     {
