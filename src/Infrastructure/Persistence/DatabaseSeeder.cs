@@ -17,19 +17,28 @@ public class DatabaseSeeder
         _logger = logger;
     }
 
-    public async Task SeedAsync()
+    public async Task MigrateAndSeedAsync(CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Running database migrations...");
+        await _context.Database.MigrateAsync(cancellationToken);
+
+        _logger.LogInformation("Seeding database...");
+        await SeedAsync(cancellationToken);
+    }
+
+    public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Starting database seeding...");
 
-        await SeedEquipmentsAsync();
-        await SeedUserBudgetsAsync();
+        await SeedEquipmentsAsync(cancellationToken);
+        await SeedUserBudgetsAsync(cancellationToken);
 
         _logger.LogInformation("Database seeding completed.");
     }
 
-    private async Task SeedEquipmentsAsync()
+    private async Task SeedEquipmentsAsync(CancellationToken cancellationToken)
     {
-        if (await _context.Equipments.AnyAsync())
+        if (await _context.Equipments.AnyAsync(cancellationToken))
         {
             _logger.LogInformation("Equipments already seeded.");
             return;
@@ -56,13 +65,13 @@ public class DatabaseSeeder
         };
 
         _context.Equipments.AddRange(equipments);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("Seeded 12 Equipments.");
     }
 
-    private async Task SeedUserBudgetsAsync()
+    private async Task SeedUserBudgetsAsync(CancellationToken cancellationToken)
     {
-        if (await _context.UserBudgets.AnyAsync())
+        if (await _context.UserBudgets.AnyAsync(cancellationToken))
         {
             _logger.LogInformation("UserBudgets already seeded.");
             return;
@@ -83,7 +92,7 @@ public class DatabaseSeeder
         };
 
         _context.UserBudgets.AddRange(budgets);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("Seeded 4 User Budgets.");
     }
 }

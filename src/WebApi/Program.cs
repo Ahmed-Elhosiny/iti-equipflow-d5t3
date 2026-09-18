@@ -91,6 +91,7 @@ builder.Services.AddHealthChecks();
 // Register DbContext for EF Core design-time tools
 builder.Services.AddDbContext<EquipFlowDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Host=localhost;Database=equipflow"));
+builder.Services.AddScoped<DatabaseSeeder>();
 builder.Services.AddScoped<IAgentEventStore, AgentEventStore>();
 builder.Services.AddScoped<IUserBudgetRepository, UserBudgetRepository>();
 builder.Services.AddScoped<IWorkOrderRepository, WorkOrderRepository>();
@@ -123,6 +124,19 @@ builder.Services.AddScoped<ILLMProvider>(serviceProvider =>
 builder.Services.AddEquipFlowTools();
 
 var app = builder.Build();
+
+var isSeedMode = args.Any(argument => string.Equals(argument, "--seed", StringComparison.OrdinalIgnoreCase))
+    || bool.TryParse(Environment.GetEnvironmentVariable("SEED_MODE"), out var seedMode)
+        && seedMode;
+
+if (isSeedMode)
+{
+    using var scope = app.Services.CreateScope();
+    var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
+    await seeder.MigrateAndSeedAsync();
+    app.Logger.LogInformation("Seed completed. Exiting.");
+    return;
+}
 
 // Configure the HTTP request pipeline.
 app.UseMiddleware<CorrelationIdMiddleware>();
