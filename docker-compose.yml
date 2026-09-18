@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   db:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg18
     container_name: equipflow-db
     environment:
       POSTGRES_USER: equipflow
@@ -11,27 +9,63 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U equipflow"]
+      test: ["CMD-SHELL", "pg_isready -U equipflow -d equipflow"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   api:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: equipflow-api
+    env_file:
+      - .env
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:5000
       ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=equipflow;Username=equipflow;Password=equipflow_password
+      # Override Ollama URL to use Docker service name
+      Llm__Ollama__BaseUrl: http://host.docker.internal:11434
     ports:
       - "5000:5000"
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Seed service - runs once to populate database with demo data
+  # Usage: docker compose run --rm seed
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: equipflow-seed
+    env_file:
+      - .env
+    command: ["--seed"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=equipflow;Username=equipflow;Password=equipflow_password
+      SEED_MODE: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    profiles:
+      - tools
 
 volumes:
   postgres_data:
