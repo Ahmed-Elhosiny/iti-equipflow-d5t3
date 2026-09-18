@@ -26,7 +26,7 @@ public sealed class CreateWorkOrderExecutor(
     /// <summary>
     /// Gets the name of the tool handled by this executor.
     /// </summary>
-    public string ToolName => "create_work_order";
+    public string ToolName => "CreateWorkOrder";
 
     /// <summary>
     /// Deserializes the tool arguments and creates a work order through the application layer.
@@ -52,7 +52,7 @@ public sealed class CreateWorkOrderExecutor(
                 return new ToolExecutionResult(
                     false,
                     null,
-                    "The create_work_order arguments could not be deserialized.");
+                    "The CreateWorkOrder arguments could not be deserialized.");
             }
 
             var command = new CreateWorkOrderCommand(

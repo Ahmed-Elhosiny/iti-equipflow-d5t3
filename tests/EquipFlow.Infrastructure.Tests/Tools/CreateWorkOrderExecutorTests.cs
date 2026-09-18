@@ -48,7 +48,7 @@ public sealed class CreateWorkOrderExecutorTests
 
         Assert.False(result.Succeeded);
         Assert.Equal(ToolDispatchStatus.ExecutorFailed, result.Status);
-        Assert.Equal("CREATE_WORK_ORDER_FAILED", result.ErrorCode);
+        Assert.Equal("CreateWorkOrder_FAILED", result.ErrorCode);
         Assert.Equal("Handler unavailable.", result.ErrorMessage);
     }
 
@@ -61,7 +61,7 @@ public sealed class CreateWorkOrderExecutorTests
 
         Assert.False(result.Succeeded);
         Assert.Equal(ToolDispatchStatus.ExecutorFailed, result.Status);
-        Assert.Equal("CREATE_WORK_ORDER_FAILED", result.ErrorCode);
+        Assert.Equal("CreateWorkOrder_FAILED", result.ErrorCode);
         Assert.Contains("invalid", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
     }
 
