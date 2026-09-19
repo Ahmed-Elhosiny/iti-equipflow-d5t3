@@ -19,10 +19,14 @@ using EquipFlow.Infrastructure.Search;
 using EquipFlow.Infrastructure.Text;
 using EquipFlow.WebApi.Middleware;
 using EquipFlow.WebApi.Options;
+using EquipFlow.WebApi.Health;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -86,7 +90,15 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("ManagerOnly", policy => policy.RequireRole("Manager"));
     options.AddPolicy("Supervisor", policy => policy.RequireRole("Supervisor"));
 });
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddNpgSql(
+        builder.Configuration.GetConnectionString("DefaultConnection") 
+            ?? throw new InvalidOperationException("DefaultConnection missing"),
+        name: "postgres",
+        tags: new[] { "db", "ready" })
+    .AddCheck<LLMHealthCheck>(
+        "llm_provider",
+        tags: new[] { "ai", "ready" });
 
 // Register DbContext for EF Core design-time tools
 builder.Services.AddDbContext<EquipFlowDbContext>(options =>
@@ -121,6 +133,10 @@ builder.Services.AddScoped<ILLMProvider>(serviceProvider =>
     new ConfiguredLlmProvider(
         serviceProvider.GetRequiredService<EquipFlow.Application.Ports.LLM.ILLMProviderFactory>(),
         builder.Configuration["LLM:Provider"] ?? "Mock"));
+builder.Services.AddScoped<EquipFlow.Application.Ports.LLM.ILLMGenerationPort>(serviceProvider =>
+    serviceProvider
+        .GetRequiredService<EquipFlow.Application.Ports.LLM.ILLMProviderFactory>()
+        .GetProvider(builder.Configuration["LLM:Provider"] ?? "Mock"));
 builder.Services.AddEquipFlowTools();
 
 var app = builder.Build();
@@ -151,9 +167,53 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.MapHealthChecks("/health");
-app.MapHealthChecks("/ready");
+// Liveness probe: Only checks if the app is running (no dependencies)
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false 
+});
 
+// Readiness probe: Checks critical dependencies (DB + LLM)
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var json = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description
+            })
+        });
+        await context.Response.WriteAsync(json);
+    }
+});
+
+// Full health check (all dependencies)
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = _ => true,
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var json = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description
+            })
+        });
+        await context.Response.WriteAsync(json);
+    }
+});
 
 app.MapCostGovernorEndpoints();
 app.MapDocumentsEndpoints();
