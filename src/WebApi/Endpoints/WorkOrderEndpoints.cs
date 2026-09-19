@@ -12,6 +12,17 @@ public static class WorkOrderEndpoints
 {
     public static IEndpointRouteBuilder MapWorkOrderEndpoints(this IEndpointRouteBuilder app)
     {
+        // --- NEW ENDPOINT FOR ISSUE #115 ---
+        app.MapPost("/api/workorders", Create)
+            .WithName("CreateWorkOrder")
+            .WithSummary("Create a new draft work order")
+            .WithTags("Work Orders")
+            .RequireAuthorization(policy => policy.RequireRole("Technician", "Engineer", "Manager"))
+            .Produces<Guid>(StatusCodes.Status201Created)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         app.MapGet("/api/workorders/{id:guid}", GetById)
             .WithName("GetWorkOrderById")
             .WithSummary("Get a work order by ID")
@@ -83,6 +94,54 @@ public static class WorkOrderEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         return app;
+    }
+
+    // --- NEW HANDLER METHOD FOR ISSUE #115 ---
+    private static async Task<IResult> Create(
+        CreateWorkOrderRequest request,
+        ClaimsPrincipal user,
+        HttpContext httpContext,
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        var userId = user.GetUserId();
+        if (!userId.HasValue)
+        {
+            return Results.Unauthorized();
+        }
+
+        if (string.IsNullOrWhiteSpace(GetCorrelationId(httpContext)))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "Correlation ID Missing");
+        }
+
+        // Map HTTP request to Application Command, injecting the authenticated user's ID securely
+        var command = new CreateWorkOrderCommand(
+            Title: request.Title,
+            Symptom: request.Symptom,
+            EquipmentName: request.EquipmentName,
+            CreatedBy: userId.Value.ToString(),
+            EquipmentAssetNumber: request.EquipmentAssetNumber,
+            ManualRevision: request.ManualRevision,
+            Location: request.Location);
+
+        try
+        {
+            // Note: This assumes CreateWorkOrderCommandHandler returns a Guid (the new WorkOrder ID).
+            // If your handler returns a DTO instead, change 'Guid' to the DTO type and use result.Id for the URI.
+            var workOrderId = await sender.Send(command, cancellationToken);
+            return Results.Created($"/api/workorders/{workOrderId}", workOrderId);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.BadRequest(exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Results.Conflict(exception.Message);
+        }
     }
 
     private static async Task<IResult> GetById(
@@ -242,6 +301,16 @@ public static class WorkOrderEndpoints
         httpContext.Items[CorrelationIdMiddleware.ItemKey]?.ToString();
 
     private sealed record WorkOrderDecisionRequest(string? Comment = null);
+    
+    // --- NEW REQUEST DTO FOR ISSUE #115 ---
+    // We use this to prevent the client from sending 'CreatedBy' in the body.
+    private sealed record CreateWorkOrderRequest(
+        string Title,
+        string Symptom,
+        string EquipmentName,
+        string? EquipmentAssetNumber = null,
+        string? ManualRevision = null,
+        string? Location = null);
 }
 
 public static class ClaimsPrincipalExtensions
