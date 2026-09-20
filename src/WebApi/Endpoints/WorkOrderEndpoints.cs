@@ -12,7 +12,6 @@ public static class WorkOrderEndpoints
 {
     public static IEndpointRouteBuilder MapWorkOrderEndpoints(this IEndpointRouteBuilder app)
     {
-        // --- NEW ENDPOINT FOR ISSUE #115 ---
         app.MapPost("/api/workorders", Create)
             .WithName("CreateWorkOrder")
             .WithSummary("Create a new draft work order")
@@ -20,6 +19,18 @@ public static class WorkOrderEndpoints
             .RequireAuthorization(policy => policy.RequireRole("Technician", "Engineer", "Manager"))
             .Produces<Guid>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // --- NEW ENDPOINT FOR ISSUE #117 ---
+        app.MapPost("/api/workorders/{id:guid}/safety", AddSafetyPrerequisite)
+            .WithName("AddSafetyPrerequisite")
+            .WithSummary("Add a safety prerequisite to a work order")
+            .WithTags("Work Orders")
+            .RequireAuthorization()
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
@@ -96,7 +107,46 @@ public static class WorkOrderEndpoints
         return app;
     }
 
-    // --- NEW HANDLER METHOD FOR ISSUE #115 ---
+    // --- NEW HANDLER METHOD FOR ISSUE #117 ---
+    private static async Task<IResult> AddSafetyPrerequisite(
+        Guid id,
+        AddSafetyPrerequisiteRequest request,
+        HttpContext httpContext,
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(GetCorrelationId(httpContext)))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "Correlation ID Missing");
+        }
+
+        var command = new AddSafetyPrerequisiteCommand(
+            WorkOrderId: id,
+            Description: request.Description,
+            IsMandatory: request.IsMandatory,
+            SortOrder: request.SortOrder);
+
+        try
+        {
+            await sender.Send(command, cancellationToken);
+            return Results.NoContent();
+        }
+        catch (WorkOrderNotFoundException exception)
+        {
+            return Results.NotFound(exception.Message);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.BadRequest(exception.Message);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Results.Conflict(exception.Message);
+        }
+    }
+
     private static async Task<IResult> Create(
         CreateWorkOrderRequest request,
         ClaimsPrincipal user,
@@ -117,7 +167,6 @@ public static class WorkOrderEndpoints
                 title: "Correlation ID Missing");
         }
 
-        // Map HTTP request to Application Command, injecting the authenticated user's ID securely
         var command = new CreateWorkOrderCommand(
             Title: request.Title,
             Symptom: request.Symptom,
@@ -129,8 +178,6 @@ public static class WorkOrderEndpoints
 
         try
         {
-            // Note: This assumes CreateWorkOrderCommandHandler returns a Guid (the new WorkOrder ID).
-            // If your handler returns a DTO instead, change 'Guid' to the DTO type and use result.Id for the URI.
             var workOrderId = await sender.Send(command, cancellationToken);
             return Results.Created($"/api/workorders/{workOrderId}", workOrderId);
         }
@@ -302,8 +349,6 @@ public static class WorkOrderEndpoints
 
     private sealed record WorkOrderDecisionRequest(string? Comment = null);
     
-    // --- NEW REQUEST DTO FOR ISSUE #115 ---
-    // We use this to prevent the client from sending 'CreatedBy' in the body.
     private sealed record CreateWorkOrderRequest(
         string Title,
         string Symptom,
@@ -311,6 +356,12 @@ public static class WorkOrderEndpoints
         string? EquipmentAssetNumber = null,
         string? ManualRevision = null,
         string? Location = null);
+
+    // --- NEW REQUEST DTO FOR ISSUE #117 ---
+    private sealed record AddSafetyPrerequisiteRequest(
+        string Description,
+        bool IsMandatory,
+        int SortOrder);
 }
 
 public static class ClaimsPrincipalExtensions
