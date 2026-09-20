@@ -223,6 +223,7 @@ app.MapCostGovernorEndpoints();
 app.MapDocumentsEndpoints();
 app.MapSearchEndpoints();
 app.MapAiEndpoints();
+app.MapEquipmentEndpoints(); 
 app.MapWorkOrderEndpoints();
 
 app.Run();

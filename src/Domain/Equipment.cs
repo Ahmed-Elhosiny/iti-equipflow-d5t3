@@ -6,6 +6,7 @@ public class Equipment
     
     public string Name { get; set; } = string.Empty;
     public string? SerialNumber { get; set; }
+    public string? Line { get; set; }
 
     public Equipment()
     {

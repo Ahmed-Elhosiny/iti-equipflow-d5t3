@@ -18,5 +18,8 @@ public sealed class EquipmentConfiguration : IEntityTypeConfiguration<Equipment>
 
         builder.Property(equipment => equipment.SerialNumber)
             .HasMaxLength(100);
+
+        builder.Property(equipment => equipment.Line)
+            .HasMaxLength(100);
     }
 }
