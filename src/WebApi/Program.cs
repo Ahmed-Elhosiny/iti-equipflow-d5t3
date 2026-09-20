@@ -102,7 +102,10 @@ builder.Services.AddHealthChecks()
 
 // Register DbContext for EF Core design-time tools
 builder.Services.AddDbContext<EquipFlowDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Host=localhost;Database=equipflow"));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection") ?? "Host=localhost;Database=equipflow",
+        npgsqlOptions => npgsqlOptions.UseVector() // <--- THIS ENABLES PGVECTOR MAPPING
+    ));
 builder.Services.AddScoped<DatabaseSeeder>();
 builder.Services.AddScoped<IAgentEventStore, AgentEventStore>();
 builder.Services.AddScoped<IUserBudgetRepository, UserBudgetRepository>();
@@ -215,6 +218,7 @@ app.MapHealthChecks("/health", new HealthCheckOptions
     }
 });
 
+app.MapAuthEndpoints();
 app.MapCostGovernorEndpoints();
 app.MapDocumentsEndpoints();
 app.MapSearchEndpoints();
