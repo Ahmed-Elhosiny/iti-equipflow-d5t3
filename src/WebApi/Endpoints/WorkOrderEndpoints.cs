@@ -22,7 +22,6 @@ public static class WorkOrderEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
-        // --- NEW ENDPOINT FOR ISSUE #117 ---
         app.MapPost("/api/workorders/{id:guid}/safety", AddSafetyPrerequisite)
             .WithName("AddSafetyPrerequisite")
             .WithSummary("Add a safety prerequisite to a work order")
@@ -31,6 +30,19 @@ public static class WorkOrderEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // --- NEW ENDPOINT FOR ISSUE #121 ---
+        app.MapPost("/api/workorders/{id:guid}/safety/{pid:guid}/complete", CompleteSafety)
+            .WithName("CompleteSafetyPrerequisite")
+            .WithSummary("Mark a safety prerequisite as completed")
+            .WithTags("Work Orders")
+            .RequireAuthorization()
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
@@ -107,7 +119,24 @@ public static class WorkOrderEndpoints
         return app;
     }
 
-    // --- NEW HANDLER METHOD FOR ISSUE #117 ---
+    // --- NEW HANDLER METHOD FOR ISSUE #121 ---
+    private static Task<IResult> CompleteSafety(
+        Guid id,
+        Guid pid,
+        CompleteSafetyPrerequisiteRequest? request,
+        HttpContext httpContext,
+        ISender sender,
+        CancellationToken cancellationToken) =>
+        ExecuteTransition(
+            httpContext,
+            sender,
+            new CompleteSafetyPrerequisiteCommand(
+                id,
+                pid,
+                GetUserId(httpContext) ?? string.Empty,
+                request?.CompletionNote),
+            cancellationToken);
+
     private static async Task<IResult> AddSafetyPrerequisite(
         Guid id,
         AddSafetyPrerequisiteRequest request,
@@ -357,11 +386,13 @@ public static class WorkOrderEndpoints
         string? ManualRevision = null,
         string? Location = null);
 
-    // --- NEW REQUEST DTO FOR ISSUE #117 ---
     private sealed record AddSafetyPrerequisiteRequest(
         string Description,
         bool IsMandatory,
         int SortOrder);
+
+    // --- NEW REQUEST DTO FOR ISSUE #121 ---
+    private sealed record CompleteSafetyPrerequisiteRequest(string? CompletionNote = null);
 }
 
 public static class ClaimsPrincipalExtensions
