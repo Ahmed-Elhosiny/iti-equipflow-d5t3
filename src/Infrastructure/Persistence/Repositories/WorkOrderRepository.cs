@@ -7,6 +7,15 @@ namespace EquipFlow.Infrastructure.Persistence.Repositories;
 
 public sealed class WorkOrderRepository(EquipFlowDbContext context) : IWorkOrderRepository
 {
+    public async Task<IReadOnlyList<WorkOrder>> GetByEquipmentNameAsync(
+    string equipmentName, 
+    CancellationToken cancellationToken = default)
+{
+    return await context.WorkOrders
+        .Where(wo => wo.EquipmentName == equipmentName)
+        .OrderByDescending(wo => wo.CreatedAtUtc)
+        .ToListAsync(cancellationToken);
+}
     public Task<WorkOrder?> GetByIdAsync(
         Guid workOrderId,
         CancellationToken cancellationToken = default) =>
@@ -48,4 +57,6 @@ public sealed class WorkOrderRepository(EquipFlowDbContext context) : IWorkOrder
 
     public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
         context.SaveChangesAsync(cancellationToken);
+
+    
 }
