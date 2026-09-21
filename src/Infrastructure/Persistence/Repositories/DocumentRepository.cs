@@ -6,6 +6,12 @@ namespace EquipFlow.Infrastructure.Persistence.Repositories;
 
 public sealed class DocumentRepository(EquipFlowDbContext context) : IDocumentRepository
 {
+        public async Task<IReadOnlyList<Document>> GetAllAsync(CancellationToken cancellationToken)
+    {
+        return await context.Documents
+            .OrderByDescending(d => d.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
     public async Task AddAsync(Document document, CancellationToken cancellationToken)
     {
         await context.Documents.AddAsync(document, cancellationToken);
