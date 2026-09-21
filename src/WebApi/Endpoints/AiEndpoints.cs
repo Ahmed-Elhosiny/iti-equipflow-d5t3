@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using EquipFlow.Application.Agentic.Abstractions;
+using EquipFlow.Application.Agentic.Commands;
 using EquipFlow.Application.Agentic.Contracts;
 using EquipFlow.Application.Agentic.Orchestration;
 using EquipFlow.Application.Agentic.Queries;
@@ -35,7 +36,25 @@ public static class AiEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status401Unauthorized);
 
+        app.MapPost("/api/runs/{runId:guid}/cancel", CancelAgentRun)
+            .WithName("CancelAgentRun")
+            .WithTags("Observability")
+            .WithSummary("Cancel an active agent run")
+            .RequireAuthorization()
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status401Unauthorized);
+
         return app;
+    }
+
+    private static async Task<IResult> CancelAgentRun(
+        Guid runId,
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        var cancelled = await sender.Send(new CancelAgentRunCommand(runId), cancellationToken);
+        return cancelled ? Results.NoContent() : Results.NotFound();
     }
 
     private static async Task<IResult> GetAgentRunById(
@@ -54,6 +73,7 @@ public static class AiEndpoints
         HttpContext httpContext,
         AnalyzeMaintenanceRequest request,
         SequentialSupervisorOrchestrator orchestrator,
+        IActiveRunRegistry runRegistry,
         CancellationToken cancellationToken)
     {
         var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -72,34 +92,52 @@ public static class AiEndpoints
                 title: "Correlation ID Missing");
         }
 
-        var maintenanceRequest = new MaintenanceRequest(
-            userId,
-            request.SymptomDescription,
-            request.EquipmentIdHint);
-        var agentContext = new AgentContext(correlationId, userId);
+        var runId = Guid.TryParse(correlationId, out var parsedRunId) ? parsedRunId : Guid.NewGuid();
+        using var runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        
+        // Register the run so it can be cancelled externally
+        runRegistry.Register(runId, runCts);
 
-        var workflowResult = await orchestrator.RunWorkflowAsync(
-            maintenanceRequest,
-            agentContext,
-            cancellationToken);
-
-        return workflowResult.Status switch
+        try
         {
-            WorkflowStatus.PendingApproval
-                or WorkflowStatus.PartialSuccess
-                or WorkflowStatus.Cached => Results.Ok(ToResponse(workflowResult)),
-            WorkflowStatus.Blocked => Results.Problem(
-                statusCode: StatusCodes.Status402PaymentRequired,
-                title: "Budget Exhausted",
-                detail: workflowResult.ErrorMessage),
-            WorkflowStatus.Failed => Results.Problem(
-                statusCode: StatusCodes.Status422UnprocessableEntity,
-                title: "Workflow Failed",
-                detail: workflowResult.ErrorMessage),
-            _ => Results.Problem(
-                statusCode: StatusCodes.Status500InternalServerError,
-                title: "Unknown Workflow Status")
-        };
+            var maintenanceRequest = new MaintenanceRequest(
+                userId,
+                request.SymptomDescription,
+                request.EquipmentIdHint);
+            var agentContext = new AgentContext(correlationId, userId);
+
+            var workflowResult = await orchestrator.RunWorkflowAsync(
+                maintenanceRequest,
+                agentContext,
+                runCts.Token);
+
+            return workflowResult.Status switch
+            {
+                WorkflowStatus.PendingApproval
+                    or WorkflowStatus.PartialSuccess
+                    or WorkflowStatus.Cached => Results.Ok(ToResponse(workflowResult)),
+                WorkflowStatus.Blocked => Results.Problem(
+                    statusCode: StatusCodes.Status402PaymentRequired,
+                    title: "Budget Exhausted",
+                    detail: workflowResult.ErrorMessage),
+                WorkflowStatus.Failed => Results.Problem(
+                    statusCode: StatusCodes.Status422UnprocessableEntity,
+                    title: "Workflow Failed",
+                    detail: workflowResult.ErrorMessage),
+                _ => Results.Problem(
+                    statusCode: StatusCodes.Status500InternalServerError,
+                    title: "Unknown Workflow Status")
+            };
+        }
+        catch (OperationCanceledException) when (runCts.IsCancellationRequested)
+        {
+            // Return 499 Client Closed Request if the run was cancelled
+            return Results.StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
+        finally
+        {
+            runRegistry.Unregister(runId);
+        }
     }
 
     private static AnalyzeMaintenanceResponse ToResponse(WorkflowResult result) =>

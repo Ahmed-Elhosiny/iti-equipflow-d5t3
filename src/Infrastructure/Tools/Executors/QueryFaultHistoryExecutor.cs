@@ -46,38 +46,41 @@ public sealed class QueryFaultHistoryExecutor : IToolExecutor
             {
                 PropertyNameCaseInsensitive = true
             };
+            
             var historyRequest = JsonSerializer.Deserialize<QueryFaultHistoryRequest>(request.ArgumentsJson, options)
                 ?? throw new JsonException("Query fault history request could not be deserialized.");
 
             _logger.LogInformation(
-                "Querying fault history for equipment {EquipmentId} and symptom {Symptom}.",
+                "Querying fault history for equipment {EquipmentIdentifier} and symptom {Symptom}.",
                 historyRequest.EquipmentId,
                 historyRequest.Symptom);
 
-            var workOrder = await _repository.GetByIdAsync(historyRequest.EquipmentId, cancellationToken);
-            var matchesSymptom = workOrder is not null
-                && (string.IsNullOrWhiteSpace(historyRequest.Symptom)
-                    || workOrder.Symptom.Contains(historyRequest.Symptom, StringComparison.OrdinalIgnoreCase));
+            // FIX: Query by Equipment Name (e.g., "P-101") instead of treating it as a WorkOrder Guid
+            var workOrders = await _repository.GetByEquipmentNameAsync(historyRequest.EquipmentId, cancellationToken);
+
+            // Filter by symptom if the LLM provided one
+            var matchingOrders = workOrders.Where(wo =>
+                string.IsNullOrWhiteSpace(historyRequest.Symptom) ||
+                wo.Symptom.Contains(historyRequest.Symptom, StringComparison.OrdinalIgnoreCase)
+            ).ToList();
 
             var response = new QueryFaultHistoryResponse(
-                matchesSymptom
-                    ?
-                    [
-                        new QueryFaultHistoryResponse.HistoryRecord(
-                            workOrder!.Id,
-                            workOrder.CreatedAtUtc.UtcDateTime,
-                            workOrder.Symptom,
-                            workOrder.DecisionComment)
-                    ]
-                    : []);
+                matchingOrders.Select(wo => new QueryFaultHistoryResponse.HistoryRecord(
+                    wo.Id,
+                    wo.CreatedAtUtc.UtcDateTime,
+                    wo.Symptom,
+                    wo.DecisionComment
+                )).ToList()
+            );
 
             if (response.Records.Count == 0)
             {
                 _logger.LogWarning(
-                    "No fault history found for equipment {EquipmentId} and symptom {Symptom}.",
+                    "No fault history found for equipment {EquipmentIdentifier} and symptom {Symptom}.",
                     historyRequest.EquipmentId,
                     historyRequest.Symptom);
             }
+
 
             return new ToolDispatchResult(
                 request.ToolName,

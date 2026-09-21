@@ -14,11 +14,6 @@ public sealed class GetEquipmentSpecsExecutor : IToolExecutor
     private readonly IEquipmentRepository _repository;
     private readonly ILogger<GetEquipmentSpecsExecutor> _logger;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GetEquipmentSpecsExecutor"/> class.
-    /// </summary>
-    /// <param name="repository">The repository used to retrieve equipment data.</param>
-    /// <param name="logger">The logger used to record equipment specification requests.</param>
     public GetEquipmentSpecsExecutor(
         IEquipmentRepository repository,
         ILogger<GetEquipmentSpecsExecutor> logger)
@@ -29,10 +24,8 @@ public sealed class GetEquipmentSpecsExecutor : IToolExecutor
         _logger = logger;
     }
 
-    /// <inheritdoc />
     public string ToolName => "GetEquipmentSpecs";
 
-    /// <inheritdoc />
     public async Task<ToolDispatchResult> ExecuteAsync(
         ToolInvocationRequest request,
         CancellationToken cancellationToken = default)
@@ -50,14 +43,19 @@ public sealed class GetEquipmentSpecsExecutor : IToolExecutor
                 ?? throw new JsonException("Get equipment specs request could not be deserialized.");
 
             _logger.LogInformation(
-                "Getting equipment specifications for equipment {EquipmentId}.",
+                "Getting equipment specifications for equipment identifier {EquipmentIdentifier}.",
                 specsRequest.EquipmentId);
 
-            var equipment = await _repository.GetByIdAsync(specsRequest.EquipmentId, cancellationToken);
+            // FIX: Safely resolve equipment by Name instead of strict Guid lookup
+            // to handle LLMs passing equipment names (e.g., "P-101") instead of GUIDs.
+            var allEquipment = await _repository.GetAllAsync(null, cancellationToken);
+            var equipment = allEquipment.FirstOrDefault(e => 
+                e.Name.Equals(specsRequest.EquipmentId, StringComparison.OrdinalIgnoreCase));
+
             if (equipment is null)
             {
                 _logger.LogWarning(
-                    "Equipment {EquipmentId} was not found.",
+                    "Equipment {EquipmentIdentifier} was not found in the catalog.",
                     specsRequest.EquipmentId);
             }
 
@@ -66,8 +64,8 @@ public sealed class GetEquipmentSpecsExecutor : IToolExecutor
                 : new GetEquipmentSpecsResponse(
                     equipment.Name,
                     equipment.SerialNumber ?? string.Empty,
-                    string.Empty,
-                    string.Empty);
+                    string.Empty, // Manufacturer (can be populated later if added to domain)
+                    string.Empty); // Operating Limits
 
             return new ToolDispatchResult(
                 request.ToolName,
