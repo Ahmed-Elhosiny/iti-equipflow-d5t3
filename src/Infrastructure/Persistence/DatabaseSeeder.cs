@@ -38,35 +38,61 @@ public class DatabaseSeeder
 
     private async Task SeedEquipmentsAsync(CancellationToken cancellationToken)
     {
-        if (await _context.Equipments.AnyAsync(cancellationToken))
+        var existingEquipments = await _context.Equipments.ToListAsync(cancellationToken);
+
+        var lineMap = new Dictionary<string, string>
         {
-            _logger.LogInformation("Equipments already seeded.");
+            { "P-101", "Line-1" }, { "M-101", "Line-1" }, { "C-101", "Line-1" }, { "CV-101", "Line-1" },
+            { "P-201", "Line-2" }, { "M-201", "Line-2" }, { "C-201", "Line-2" }, { "CV-201", "Line-2" },
+            { "P-301", "Line-3" }, { "M-301", "Line-3" }, { "C-301", "Line-3" }, { "CV-301", "Line-3" }
+        };
+
+        if (!existingEquipments.Any())
+        {
+            var equipments = new List<Equipment>
+            {
+                new Equipment { Name = "P-101", SerialNumber = "SN-P-101-001", Line = "Line-1" },
+                new Equipment { Name = "M-101", SerialNumber = "SN-M-101-002", Line = "Line-1" },
+                new Equipment { Name = "C-101", SerialNumber = "SN-C-101-003", Line = "Line-1" },
+                new Equipment { Name = "CV-101", SerialNumber = "SN-CV-101-004", Line = "Line-1" },
+                
+                new Equipment { Name = "P-201", SerialNumber = "SN-P-201-005", Line = "Line-2" },
+                new Equipment { Name = "M-201", SerialNumber = "SN-M-201-006", Line = "Line-2" },
+                new Equipment { Name = "C-201", SerialNumber = "SN-C-201-007", Line = "Line-2" },
+                new Equipment { Name = "CV-201", SerialNumber = "SN-CV-201-008", Line = "Line-2" },
+                
+                new Equipment { Name = "P-301", SerialNumber = "SN-P-301-009", Line = "Line-3" },
+                new Equipment { Name = "M-301", SerialNumber = "SN-M-301-010", Line = "Line-3" },
+                new Equipment { Name = "C-301", SerialNumber = "SN-C-301-011", Line = "Line-3" },
+                new Equipment { Name = "CV-301", SerialNumber = "SN-CV-301-012", Line = "Line-3" }
+            };
+
+            _context.Equipments.AddRange(equipments);
+            await _context.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Seeded 12 Equipments across 3 production lines.");
             return;
         }
 
-        // 3 production lines x 4 equipment types = 12 instances
-        // Naming convention: P-101 (Line 1), P-201 (Line 2), P-301 (Line 3)
-        var equipments = new List<Equipment>
+        // Update existing equipment that might have null Line from previous seeds
+        bool updated = false;
+        foreach (var eq in existingEquipments)
         {
-            new Equipment { Name = "P-101", SerialNumber = "SN-P-101-001" },
-            new Equipment { Name = "M-101", SerialNumber = "SN-M-101-002" },
-            new Equipment { Name = "C-101", SerialNumber = "SN-C-101-003" },
-            new Equipment { Name = "CV-101", SerialNumber = "SN-CV-101-004" },
-            
-            new Equipment { Name = "P-201", SerialNumber = "SN-P-201-005" },
-            new Equipment { Name = "M-201", SerialNumber = "SN-M-201-006" },
-            new Equipment { Name = "C-201", SerialNumber = "SN-C-201-007" },
-            new Equipment { Name = "CV-201", SerialNumber = "SN-CV-201-008" },
-            
-            new Equipment { Name = "P-301", SerialNumber = "SN-P-301-009" },
-            new Equipment { Name = "M-301", SerialNumber = "SN-M-301-010" },
-            new Equipment { Name = "C-301", SerialNumber = "SN-C-301-011" },
-            new Equipment { Name = "CV-301", SerialNumber = "SN-CV-301-012" }
-        };
+            if (string.IsNullOrEmpty(eq.Line) && lineMap.TryGetValue(eq.Name, out var line))
+            {
+                eq.Line = line;
+                updated = true;
+            }
+        }
 
-        _context.Equipments.AddRange(equipments);
-        await _context.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("Seeded 12 Equipments.");
+        if (updated)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Updated existing Equipments with production lines.");
+        }
+        else
+        {
+            _logger.LogInformation("Equipments already seeded and updated.");
+        }
     }
 
     private async Task SeedUserBudgetsAsync(CancellationToken cancellationToken)
@@ -77,7 +103,6 @@ public class DatabaseSeeder
             return;
         }
 
-        // Hardcoded UserIds for demo purposes (will match JWT tokens later)
         var technicianId = Guid.Parse("00000000-0000-0000-0000-000000000001");
         var engineerId = Guid.Parse("00000000-0000-0000-0000-000000000002");
         var managerId = Guid.Parse("00000000-0000-0000-0000-000000000003");
