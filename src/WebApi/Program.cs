@@ -114,8 +114,15 @@ builder.Services.AddScoped<IEquipmentRepository, EquipmentRepository>();
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddScoped<IDocumentChunkRepository, DocumentChunkRepository>();
 builder.Services.AddScoped<ITextChunker, SimpleTextChunker>();
-builder.Services.AddScoped<IEmbeddingPort, OpenAiEmbeddingAdapter>();
-builder.Services.AddScoped<PdfDocumentExtractor>();
+var openAiApiKey = builder.Configuration["Llm:OpenAI:ApiKey"];
+if (string.IsNullOrWhiteSpace(openAiApiKey))
+{
+    builder.Services.AddScoped<IEmbeddingPort, MockEmbeddingAdapter>();
+}
+else
+{
+    builder.Services.AddScoped<IEmbeddingPort, OpenAiEmbeddingAdapter>();
+}builder.Services.AddScoped<PdfDocumentExtractor>();
 builder.Services.AddScoped<DocxDocumentExtractor>();
 builder.Services.AddScoped<IDocumentExtractor>(serviceProvider =>
     serviceProvider.GetRequiredService<PdfDocumentExtractor>());
@@ -131,16 +138,23 @@ builder.Services.AddScoped<IAgent<WorkOrderInput, WorkOrderOutput>>(serviceProvi
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
 builder.Services.AddScoped<SequentialSupervisorOrchestrator>();
 builder.Services.AddRagSearchInfrastructure();
+
 builder.Services.AddLLMProviders(builder.Configuration);
+
+var defaultLlmProvider = builder.Configuration["Llm:DefaultProvider"] ?? "Ollama";
+
 builder.Services.AddScoped<ILLMProvider>(serviceProvider =>
     new ConfiguredLlmProvider(
         serviceProvider.GetRequiredService<EquipFlow.Application.Ports.LLM.ILLMProviderFactory>(),
-        builder.Configuration["LLM:Provider"] ?? "Mock"));
+        defaultLlmProvider));
+
 builder.Services.AddScoped<EquipFlow.Application.Ports.LLM.ILLMGenerationPort>(serviceProvider =>
     serviceProvider
         .GetRequiredService<EquipFlow.Application.Ports.LLM.ILLMProviderFactory>()
-        .GetProvider(builder.Configuration["LLM:Provider"] ?? "Mock"));
+        .GetProvider(defaultLlmProvider));
+
 builder.Services.AddEquipFlowTools();
+builder.Services.AddSingleton<EquipFlow.Application.Agentic.Abstractions.IActiveRunRegistry, EquipFlow.Infrastructure.Agentic.ActiveRunRegistry>();
 
 var app = builder.Build();
 

@@ -109,7 +109,7 @@ public sealed class GenerateSafetyChecklistExecutorTests
     private static ToolInvocationRequest CreateRequest(Guid equipmentId, string taskDescription) =>
         new(
             "GenerateSafetyChecklist",
-            JsonSerializer.Serialize(new GenerateSafetyChecklistRequest(equipmentId, taskDescription)),
+            JsonSerializer.Serialize(new GenerateSafetyChecklistRequest(equipmentId.ToString(), taskDescription)),
             CreateContext());
 
     private static ToolInvocationContext CreateContext() => new(

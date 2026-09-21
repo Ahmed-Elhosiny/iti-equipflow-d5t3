@@ -4,7 +4,7 @@ namespace EquipFlow.Application.Tools.Definitions;
 /// Request for searching equipment manuals.
 /// </summary>
 public sealed record SearchManualsRequest(
-    Guid? EquipmentId,
+    string? EquipmentId, // Changed from Guid?
     string Query,
     string? DocumentType);
 
@@ -14,18 +14,12 @@ public sealed record SearchManualsRequest(
 public sealed record SearchManualsResponse(
     IReadOnlyList<SearchManualsResponse.Chunk> Chunks)
 {
-    /// <summary>
-    /// A matching manual chunk.
-    /// </summary>
     public sealed record Chunk(
       Guid ChunkId,
       string Content,
       double Score,
       Citation Citation);
 
-    /// <summary>
-    /// Citation metadata for a retrieved manual chunk.
-    /// </summary>
     public sealed record Citation(
       Guid DocumentId,
       string DocumentTitle,
@@ -37,7 +31,7 @@ public sealed record SearchManualsResponse(
 /// Request for querying equipment fault history.
 /// </summary>
 public sealed record QueryFaultHistoryRequest(
-    Guid EquipmentId,
+    string EquipmentId,
     string? Symptom);
 
 /// <summary>
@@ -46,9 +40,6 @@ public sealed record QueryFaultHistoryRequest(
 public sealed record QueryFaultHistoryResponse(
     IReadOnlyList<QueryFaultHistoryResponse.HistoryRecord> Records)
 {
-    /// <summary>
-    /// A recorded equipment fault event.
-    /// </summary>
     public sealed record HistoryRecord(
         Guid EventId,
         DateTime OccurredAt,
@@ -59,7 +50,7 @@ public sealed record QueryFaultHistoryResponse(
 /// <summary>
 /// Request for retrieving equipment specifications.
 /// </summary>
-public sealed record GetEquipmentSpecsRequest(Guid EquipmentId);
+public sealed record GetEquipmentSpecsRequest(string EquipmentId); // Changed from Guid
 
 /// <summary>
 /// Response containing equipment specifications.
@@ -74,8 +65,8 @@ public sealed record GetEquipmentSpecsResponse(
 /// Request for generating an equipment safety checklist.
 /// </summary>
 public sealed record GenerateSafetyChecklistRequest(
-    Guid EquipmentId,
-  string TaskDescription);
+    string EquipmentId, // Changed from Guid
+    string TaskDescription);
 
 /// <summary>
 /// Response containing a generated safety checklist.
@@ -83,17 +74,11 @@ public sealed record GenerateSafetyChecklistRequest(
 public sealed record GenerateSafetyChecklistResponse(
     IReadOnlyList<GenerateSafetyChecklistResponse.ChecklistItem> Items)
 {
-    /// <summary>
-    /// An item in the generated safety checklist.
-    /// </summary>
     public sealed record ChecklistItem(
       string Description,
       bool IsMandatory,
       ChecklistCitation Citation);
 
-    /// <summary>
-    /// Citation metadata for a safety checklist item.
-    /// </summary>
     public sealed record ChecklistCitation(
       Guid DocumentId,
       string DocumentTitle,
@@ -106,9 +91,6 @@ public sealed record GenerateSafetyChecklistResponse(
 /// </summary>
 public static class ToolSchemas
 {
-    /// <summary>
-    /// JSON schema for <see cref="SearchManualsRequest"/>.
-    /// </summary>
     public const string SearchManualsSchema = """
         {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -116,8 +98,7 @@ public static class ToolSchemas
           "type": "object",
           "properties": {
             "equipmentId": {
-              "type": ["string", "null"],
-              "format": "uuid"
+              "type": ["string", "null"]
             },
             "query": {
               "type": "string"
@@ -130,9 +111,6 @@ public static class ToolSchemas
         }
         """;
 
-    /// <summary>
-    /// JSON schema for <see cref="QueryFaultHistoryRequest"/>.
-    /// </summary>
     public const string QueryFaultHistorySchema = """
         {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -140,8 +118,7 @@ public static class ToolSchemas
           "type": "object",
           "properties": {
             "equipmentId": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "symptom": {
               "type": ["string", "null"]
@@ -151,9 +128,6 @@ public static class ToolSchemas
         }
         """;
 
-    /// <summary>
-    /// JSON schema for <see cref="GetEquipmentSpecsRequest"/>.
-    /// </summary>
     public const string GetEquipmentSpecsSchema = """
         {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -161,17 +135,13 @@ public static class ToolSchemas
           "type": "object",
           "properties": {
             "equipmentId": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           },
           "required": ["equipmentId"]
         }
         """;
 
-    /// <summary>
-    /// JSON schema for <see cref="GenerateSafetyChecklistRequest"/>.
-    /// </summary>
     public const string GenerateSafetyChecklistSchema = """
         {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -179,8 +149,7 @@ public static class ToolSchemas
           "type": "object",
           "properties": {
             "equipmentId": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "taskDescription": {
               "type": "string"

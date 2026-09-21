@@ -100,8 +100,8 @@ public sealed class OllamaLLMGenerationAdapter : ILLMGenerationPort
                 throw new JsonException("Ollama response did not contain message.content.");
             }
 
-            var toolCalls = result.ToolCalls is { Count: > 0 }
-                ? result.ToolCalls
+            var toolCalls = result.Message?.ToolCalls is { Count: > 0 }
+                ? result.Message.ToolCalls
                     .Select(toolCall => new EquipFlow.Application.Ports.LLM.ToolCall(
                         Guid.NewGuid().ToString("N"),
                         toolCall.Function?.Name ?? string.Empty,
@@ -252,11 +252,10 @@ public sealed class OllamaLLMGenerationAdapter : ILLMGenerationPort
     private static string BuildChatEndpoint(string baseUrl) =>
         $"{baseUrl.TrimEnd('/')}/api/chat";
 
-    private sealed record OllamaChatResponse(
+     private sealed record OllamaChatResponse(
         [property: JsonPropertyName("message")] OllamaMessage? Message,
         [property: JsonPropertyName("prompt_eval_count")] int PromptEvalCount,
-        [property: JsonPropertyName("eval_count")] int EvalCount,
-        [property: JsonPropertyName("tool_calls")] IReadOnlyList<OllamaToolCall>? ToolCalls);
+        [property: JsonPropertyName("eval_count")] int EvalCount);
 
     private sealed record OllamaToolCall(
         [property: JsonPropertyName("function")] OllamaFunctionCall? Function);
@@ -266,7 +265,8 @@ public sealed class OllamaLLMGenerationAdapter : ILLMGenerationPort
         [property: JsonPropertyName("arguments")] JsonElement? Arguments);
 
     private sealed record OllamaMessage(
-        [property: JsonPropertyName("content")] string? Content);
+        [property: JsonPropertyName("content")] string? Content,
+        [property: JsonPropertyName("tool_calls")] IReadOnlyList<OllamaToolCall>? ToolCalls);
 
     private sealed record OllamaStreamingResponse(
         [property: JsonPropertyName("message")] OllamaMessage? Message,

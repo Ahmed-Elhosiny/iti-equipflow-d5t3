@@ -13,6 +13,9 @@ public class BudgetReservationConfiguration : IEntityTypeConfiguration<BudgetRes
 
         builder.HasKey(x => x.Id);
 
+        builder.Property(x => x.Id).ValueGeneratedNever();
+
+
         builder.Property(x => x.EstimatedCost)
             .HasConversion(
                 money => money.Amount,

@@ -96,7 +96,7 @@ public sealed class GetEquipmentSpecsExecutorTests
     private static ToolInvocationRequest CreateRequest(Guid equipmentId) =>
         new(
             "GetEquipmentSpecs",
-            JsonSerializer.Serialize(new GetEquipmentSpecsRequest(equipmentId)),
+            JsonSerializer.Serialize(new GetEquipmentSpecsRequest(equipmentId.ToString())),
             CreateContext());
 
     private static ToolInvocationContext CreateContext() => new(

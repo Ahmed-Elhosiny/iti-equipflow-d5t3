@@ -11,17 +11,22 @@ namespace EquipFlow.Infrastructure.Tests.Tools;
 
 public sealed class QueryFaultHistoryExecutorTests
 {
+    private const string EquipmentName = "Pump-101";
+
     [Fact]
     public async Task ExecuteAsync_WhenRepositoryReturnsMatchingWorkOrder_MapsHistoryRecord()
     {
         var repository = Substitute.For<IWorkOrderRepository>();
         var logger = Substitute.For<ILogger<QueryFaultHistoryExecutor>>();
         var workOrder = CreateApprovedWorkOrder();
-        repository.GetByIdAsync(workOrder.Id, Arg.Any<CancellationToken>())
-            .Returns(workOrder);
+        
+        // Mock the new GetByEquipmentNameAsync method
+        repository.GetByEquipmentNameAsync(EquipmentName, Arg.Any<CancellationToken>())
+            .Returns(new List<WorkOrder> { workOrder });
+            
         var executor = new QueryFaultHistoryExecutor(repository, logger);
 
-        var result = await executor.ExecuteAsync(CreateRequest(workOrder.Id, "overheating"));
+        var result = await executor.ExecuteAsync(CreateRequest(EquipmentName, "overheating"));
 
         Assert.True(result.Succeeded);
         Assert.Equal(ToolDispatchStatus.Success, result.Status);
@@ -34,16 +39,17 @@ public sealed class QueryFaultHistoryExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenRepositoryReturnsNull_LogsWarningAndReturnsEmptyRecords()
+    public async Task ExecuteAsync_WhenRepositoryReturnsEmpty_LogsWarningAndReturnsEmptyRecords()
     {
         var repository = Substitute.For<IWorkOrderRepository>();
         var logger = Substitute.For<ILogger<QueryFaultHistoryExecutor>>();
-        var equipmentId = Guid.NewGuid();
-        repository.GetByIdAsync(equipmentId, Arg.Any<CancellationToken>())
-            .Returns((WorkOrder?)null);
+        
+        repository.GetByEquipmentNameAsync("Unknown-Equipment", Arg.Any<CancellationToken>())
+            .Returns(new List<WorkOrder>());
+            
         var executor = new QueryFaultHistoryExecutor(repository, logger);
 
-        var result = await executor.ExecuteAsync(CreateRequest(equipmentId, null));
+        var result = await executor.ExecuteAsync(CreateRequest("Unknown-Equipment", null));
 
         Assert.True(result.Succeeded);
         var response = JsonSerializer.Deserialize<QueryFaultHistoryResponse>(result.ResultJson!);
@@ -57,11 +63,13 @@ public sealed class QueryFaultHistoryExecutorTests
         var repository = Substitute.For<IWorkOrderRepository>();
         var logger = Substitute.For<ILogger<QueryFaultHistoryExecutor>>();
         var workOrder = CreateApprovedWorkOrder();
-        repository.GetByIdAsync(workOrder.Id, Arg.Any<CancellationToken>())
-            .Returns(workOrder);
+        
+        repository.GetByEquipmentNameAsync(EquipmentName, Arg.Any<CancellationToken>())
+            .Returns(new List<WorkOrder> { workOrder });
+            
         var executor = new QueryFaultHistoryExecutor(repository, logger);
 
-        var result = await executor.ExecuteAsync(CreateRequest(workOrder.Id, "pressure loss"));
+        var result = await executor.ExecuteAsync(CreateRequest(EquipmentName, "pressure loss"));
 
         Assert.True(result.Succeeded);
         var response = JsonSerializer.Deserialize<QueryFaultHistoryResponse>(result.ResultJson!);
@@ -75,11 +83,13 @@ public sealed class QueryFaultHistoryExecutorTests
         var repository = Substitute.For<IWorkOrderRepository>();
         var logger = Substitute.For<ILogger<QueryFaultHistoryExecutor>>();
         var exception = new InvalidOperationException("Repository unavailable.");
-        repository.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromException<WorkOrder?>(exception));
+        
+        repository.GetByEquipmentNameAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<IReadOnlyList<WorkOrder>>(exception));
+            
         var executor = new QueryFaultHistoryExecutor(repository, logger);
 
-        var result = await executor.ExecuteAsync(CreateRequest(Guid.NewGuid(), null));
+        var result = await executor.ExecuteAsync(CreateRequest("Some-Equipment", null));
 
         Assert.False(result.Succeeded);
         Assert.Equal(ToolDispatchStatus.ExecutorFailed, result.Status);
@@ -114,7 +124,7 @@ public sealed class QueryFaultHistoryExecutorTests
         var workOrder = new WorkOrder(
             "Overheating investigation",
             "Motor overheating",
-            "Pump-101",
+            EquipmentName, // Use the constant equipment name
             "technician-1");
         var prerequisite = workOrder.AddSafetyPrerequisite("Isolate equipment");
         workOrder.CompleteSafetyPrerequisite(prerequisite.Id, "technician-1");
@@ -123,10 +133,11 @@ public sealed class QueryFaultHistoryExecutorTests
         return workOrder;
     }
 
-    private static ToolInvocationRequest CreateRequest(Guid equipmentId, string? symptom) =>
+    // Changed parameter from Guid to string
+    private static ToolInvocationRequest CreateRequest(string equipmentIdentifier, string? symptom) =>
         new(
             "QueryFaultHistory",
-            JsonSerializer.Serialize(new QueryFaultHistoryRequest(equipmentId, symptom)),
+            JsonSerializer.Serialize(new QueryFaultHistoryRequest(equipmentIdentifier, symptom)),
             CreateContext());
 
     private static ToolInvocationContext CreateContext() => new(

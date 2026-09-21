@@ -13,6 +13,9 @@ public class UserBudgetConfiguration : IEntityTypeConfiguration<UserBudget>
 
         builder.HasKey(x => x.Id);
 
+        builder.Property(x => x.Id).ValueGeneratedNever();
+
+
         builder.HasIndex(x => x.UserId)
             .IsUnique();
 

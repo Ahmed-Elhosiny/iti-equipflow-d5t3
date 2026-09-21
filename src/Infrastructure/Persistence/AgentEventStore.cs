@@ -28,20 +28,40 @@ public sealed class AgentEventStore : IAgentEventStore
         CancellationToken cancellationToken = default)
     {
         await _dbContext.AgentEvents.AddRangeAsync(
-            new[] { ToEntity(@event) },
+            // Guard against null or empty events
+            [ToEntity(@event)],
             cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     /// <inheritdoc />
-    public async Task AppendRangeAsync(
+       public async Task AppendRangeAsync(
         IEnumerable<AgentEventBase> events,
         CancellationToken cancellationToken = default)
     {
         var entities = events.Select(ToEntity).ToList();
+        if (entities.Count == 0) return;
 
-        await _dbContext.AgentEvents.AddRangeAsync(entities, cancellationToken);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (_dbContext.Database.IsRelational())
+        {
+            // Bypass EF Core Change Tracker for relational DBs (PostgreSQL) 
+            // to avoid any potential Guid PK concurrency exceptions.
+            foreach (var entity in entities)
+            {
+                await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"""
+                    INSERT INTO "AgentEvents" ("Id", "CorrelationId", "Timestamp", "AgentName", "StepIndex", "EventType", "Payload")
+                    VALUES ({entity.Id}, {entity.CorrelationId}, {entity.Timestamp}, {entity.AgentName}, {entity.StepIndex}, {entity.EventType}, {entity.Payload}::jsonb)
+                    """,
+                    cancellationToken);
+            }
+        }
+        else
+        {
+            // Fallback for In-Memory/Non-relational providers (used in integration tests)
+            await _dbContext.AgentEvents.AddRangeAsync(entities, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
     }
 
     /// <inheritdoc />
@@ -63,6 +83,7 @@ public sealed class AgentEventStore : IAgentEventStore
 
         return new AgentEventEntity
         {
+            Id = Guid.NewGuid(),
             CorrelationId = @event.CorrelationId,
             Timestamp = @event.Timestamp,
             AgentName = @event.AgentName,

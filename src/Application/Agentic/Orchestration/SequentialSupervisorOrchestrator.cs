@@ -182,7 +182,7 @@ public sealed class SequentialSupervisorOrchestrator(
                 finalError,
                 outputSummary));
 
-            await agentEventStore.AppendRangeAsync(collectedEvents, cancellationToken);
+            await agentEventStore.AppendRangeAsync(collectedEvents, CancellationToken.None);
         }
     }
 
