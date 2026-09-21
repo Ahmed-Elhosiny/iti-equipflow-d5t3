@@ -15,4 +15,5 @@ public interface IWorkOrderRepository
         CancellationToken cancellationToken = default);
     Task AddAsync(WorkOrder workOrder, CancellationToken cancellationToken = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<WorkOrder>> GetByEquipmentNameAsync(string equipmentName, CancellationToken cancellationToken = default);
 }

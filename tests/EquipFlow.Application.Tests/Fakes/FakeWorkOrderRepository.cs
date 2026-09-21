@@ -14,7 +14,17 @@ public class FakeWorkOrderRepository : IWorkOrderRepository
         _workOrders.TryGetValue(workOrderId, out var workOrder);
         return Task.FromResult(workOrder);
     }
-
+        public Task<IReadOnlyList<WorkOrder>> GetByEquipmentNameAsync(
+        string equipmentName, 
+        CancellationToken cancellationToken = default)
+    {
+        // Assuming your fake uses a List<WorkOrder> or similar collection named _workOrders
+        var results = _workOrders.Values
+            .Where(wo => wo.EquipmentName == equipmentName)
+            .ToList();
+            
+        return Task.FromResult<IReadOnlyList<WorkOrder>>(results);
+    }
     public Task<IReadOnlyList<WorkOrder>> GetByUserIdAsync(
         Guid userId,
         WorkOrderStatus? statusFilter = null,
