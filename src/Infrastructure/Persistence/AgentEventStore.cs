@@ -34,24 +34,33 @@ public sealed class AgentEventStore : IAgentEventStore
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-        /// <inheritdoc />
-    public async Task AppendRangeAsync(
+    /// <inheritdoc />
+       public async Task AppendRangeAsync(
         IEnumerable<AgentEventBase> events,
         CancellationToken cancellationToken = default)
     {
         var entities = events.Select(ToEntity).ToList();
         if (entities.Count == 0) return;
 
-        // Bypass EF Core Change Tracker to avoid Guid PK concurrency exceptions
-        // in append-only event stores.
-        foreach (var entity in entities)
+        if (_dbContext.Database.IsRelational())
         {
-            await _dbContext.Database.ExecuteSqlInterpolatedAsync(
-                $"""
-                INSERT INTO "AgentEvents" ("Id", "CorrelationId", "Timestamp", "AgentName", "StepIndex", "EventType", "Payload")
-                VALUES ({entity.Id}, {entity.CorrelationId}, {entity.Timestamp}, {entity.AgentName}, {entity.StepIndex}, {entity.EventType}, {entity.Payload}::jsonb)
-                """,
-                cancellationToken);
+            // Bypass EF Core Change Tracker for relational DBs (PostgreSQL) 
+            // to avoid any potential Guid PK concurrency exceptions.
+            foreach (var entity in entities)
+            {
+                await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"""
+                    INSERT INTO "AgentEvents" ("Id", "CorrelationId", "Timestamp", "AgentName", "StepIndex", "EventType", "Payload")
+                    VALUES ({entity.Id}, {entity.CorrelationId}, {entity.Timestamp}, {entity.AgentName}, {entity.StepIndex}, {entity.EventType}, {entity.Payload}::jsonb)
+                    """,
+                    cancellationToken);
+            }
+        }
+        else
+        {
+            // Fallback for In-Memory/Non-relational providers (used in integration tests)
+            await _dbContext.AgentEvents.AddRangeAsync(entities, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
     }
 
