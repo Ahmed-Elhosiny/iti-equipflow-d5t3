@@ -105,6 +105,18 @@ public static class WorkOrderEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+                app.MapPost("/api/workorders/{id:guid}/edit-and-approve", EditAndApprove)
+            .WithName("EditAndApproveWorkOrder")
+            .WithSummary("Edit permitted fields and approve a work order")
+            .WithTags("Work Orders")
+            .RequireAuthorization("Supervisor")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         app.MapPost("/api/workorders/{id:guid}/dispatch", Dispatch)
             .WithName("DispatchWorkOrder")
             .WithTags("Work Orders")
@@ -314,6 +326,28 @@ public static class WorkOrderEndpoints
                 GetCorrelationId(httpContext)),
             cancellationToken);
 
+        private static Task<IResult> EditAndApprove(
+        Guid id,
+        WorkOrderEditAndApproveRequest? request,
+        HttpContext httpContext,
+        ISender sender,
+        CancellationToken cancellationToken) =>
+        ExecuteTransition(
+            httpContext,
+            sender,
+            new ReviewWorkOrderCommand(
+                id,
+                WorkOrderReviewDecision.EditAndApprove,
+                GetUserId(httpContext) ?? string.Empty,
+                request?.Comment,
+                GetCorrelationId(httpContext),
+                request?.Title,
+                request?.Symptom,
+                request?.EquipmentName,
+                request?.EquipmentAssetNumber,
+                request?.ManualRevision,
+                request?.Location),
+            cancellationToken);
     private static Task<IResult> Dispatch(
         Guid id,
         HttpContext httpContext,
@@ -377,6 +411,14 @@ public static class WorkOrderEndpoints
         httpContext.Items[CorrelationIdMiddleware.ItemKey]?.ToString();
 
     private sealed record WorkOrderDecisionRequest(string? Comment = null);
+        private sealed record WorkOrderEditAndApproveRequest(
+        string? Comment = null,
+        string? Title = null,
+        string? Symptom = null,
+        string? EquipmentName = null,
+        string? EquipmentAssetNumber = null,
+        string? ManualRevision = null,
+        string? Location = null);
     
     private sealed record CreateWorkOrderRequest(
         string Title,
