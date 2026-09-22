@@ -22,6 +22,7 @@ public sealed class SequentialSupervisorOrchestrator(
     public async Task<WorkflowResult> RunWorkflowAsync(
         MaintenanceRequest request,
         IAgentContext context,
+        Action<AgentEventBase>? onEvent = null,
         CancellationToken cancellationToken = default)
     {
         var correlationId = Guid.TryParse(context.CorrelationId, out var parsedCorrelationId)
@@ -29,7 +30,7 @@ public sealed class SequentialSupervisorOrchestrator(
             : Guid.NewGuid();
         var collectedEvents = new List<AgentEventBase>();
         var workflowStopwatch = Stopwatch.StartNew();
-        var eventCollector = new RecordingAgentContext(context, correlationId, collectedEvents);
+        var eventCollector = new RecordingAgentContext(context, correlationId, collectedEvents, onEvent);
         var finalStatus = AgentRunStatus.Failed;
         string? finalError = null;
         string? outputSummary = null;
@@ -45,6 +46,8 @@ public sealed class SequentialSupervisorOrchestrator(
             0,
             request.SymptomDescription,
             (int)WorkflowTimeout.TotalMilliseconds));
+            
+        onEvent?.Invoke(collectedEvents.Last());
 
         using var workflowTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         workflowTimeout.CancelAfter(WorkflowTimeout);
@@ -52,7 +55,6 @@ public sealed class SequentialSupervisorOrchestrator(
 
         try
         {
-            // TODO: Extract the user identity from the authenticated user context.
             var reservation = await costGovernor.EstimateAndReserveAsync(
                 resolvedUserId,
                 estimatedTokens: 3000,
@@ -172,7 +174,7 @@ public sealed class SequentialSupervisorOrchestrator(
         }
         finally
         {
-            collectedEvents.Add(new AgentRunCompleted(
+            var completedEvent = new AgentRunCompleted(
                 correlationId,
                 DateTimeOffset.UtcNow,
                 nameof(SequentialSupervisorOrchestrator),
@@ -180,7 +182,10 @@ public sealed class SequentialSupervisorOrchestrator(
                 finalStatus,
                 workflowStopwatch.ElapsedMilliseconds,
                 finalError,
-                outputSummary));
+                outputSummary);
+                
+            collectedEvents.Add(completedEvent);
+            onEvent?.Invoke(completedEvent);
 
             await agentEventStore.AppendRangeAsync(collectedEvents, CancellationToken.None);
         }
@@ -249,13 +254,18 @@ public sealed class SequentialSupervisorOrchestrator(
     private sealed class RecordingAgentContext(
         IAgentContext source,
         Guid correlationId,
-        List<AgentEventBase> collectedEvents) : IAgentContext, IAgentEventCollector
+        List<AgentEventBase> collectedEvents,
+        Action<AgentEventBase>? onEvent) : IAgentContext, IAgentEventCollector
     {
         public string CorrelationId => correlationId.ToString();
 
         public string UserId => source.UserId;
 
-        public void Add(AgentEventBase @event) => collectedEvents.Add(@event);
+        public void Add(AgentEventBase @event) 
+        {
+            collectedEvents.Add(@event);
+            onEvent?.Invoke(@event);
+        }
     }
 }
 
