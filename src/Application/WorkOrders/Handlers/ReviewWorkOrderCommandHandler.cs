@@ -31,6 +31,17 @@ public class ReviewWorkOrderCommandHandler : IRequestHandler<ReviewWorkOrderComm
             case WorkOrderReviewDecision.Reject:
                 workOrder.Reject(command.ReviewerUserId, command.Comment);
                 break;
+            case WorkOrderReviewDecision.EditAndApprove:
+                workOrder.EditAndApprove(
+                    command.ReviewerUserId, 
+                    command.Comment,
+                    command.Title,
+                    command.Symptom,
+                    command.EquipmentName,
+                    command.EquipmentAssetNumber,
+                    command.ManualRevision,
+                    command.Location);
+                break;
             default:
                 throw new ArgumentException($"Unknown decision type: {command.Decision}", nameof(command.Decision));
         }
