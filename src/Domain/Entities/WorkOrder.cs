@@ -144,6 +144,42 @@ public class WorkOrder
         UpdateTimestamp();
     }
 
+        public void EditAndApprove(
+        string approverUserId, 
+        string? comment,
+        string? title,
+        string? symptom,
+        string? equipmentName,
+        string? equipmentAssetNumber,
+        string? manualRevision,
+        string? location)
+    {
+        if (Status != WorkOrderStatus.PendingApproval)
+            throw new InvalidOperationException($"Only PendingApproval work orders can be edited and approved. Current status: {Status}");
+
+        if (HasUnmetMandatorySafetyPrerequisites)
+            throw new InvalidOperationException("All mandatory safety prerequisites must be completed before approval.");
+
+        // Track changes for auditability without altering the DB schema
+        var changes = new List<string>();
+        if (!string.IsNullOrWhiteSpace(title) && title != Title) { Title = title; changes.Add("Title"); }
+        if (!string.IsNullOrWhiteSpace(symptom) && symptom != Symptom) { Symptom = symptom; changes.Add("Symptom"); }
+        if (!string.IsNullOrWhiteSpace(equipmentName) && equipmentName != EquipmentName) { EquipmentName = equipmentName; changes.Add("EquipmentName"); }
+        if (equipmentAssetNumber != EquipmentAssetNumber) { EquipmentAssetNumber = equipmentAssetNumber; changes.Add("EquipmentAssetNumber"); }
+        if (manualRevision != ManualRevision) { ManualRevision = manualRevision; changes.Add("ManualRevision"); }
+        if (location != Location) { Location = location; changes.Add("Location"); }
+
+        Status = WorkOrderStatus.Approved;
+        DecisionBy = approverUserId;
+        DecisionAtUtc = DateTimeOffset.UtcNow;
+        DecisionComment = comment;
+        
+        var editsSummary = changes.Count > 0 ? $"Edited: {string.Join(", ", changes)}" : "No fields edited.";
+        var auditComment = string.IsNullOrWhiteSpace(comment) ? editsSummary : $"{comment} | {editsSummary}";
+
+        _approvalActions.Add(new ApprovalAction(Id, Enums.ApprovalActionType.EditedAndApproved, approverUserId, auditComment));
+        UpdateTimestamp();
+    }
     public void Reject(string approverUserId, string? comment = null)
     {
         if (Status != WorkOrderStatus.PendingApproval)
