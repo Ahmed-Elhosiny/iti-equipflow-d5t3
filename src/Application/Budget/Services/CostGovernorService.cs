@@ -25,7 +25,7 @@ public sealed class CostGovernorService(
         string.Empty,
         null);
 
-    public async Task<CostGovernorResult> EstimateAndReserveAsync(
+      public async Task<CostGovernorResult> EstimateAndReserveAsync(
         string userId,
         int estimatedTokens,
         decimal pricePerThousandTokens,
@@ -39,8 +39,23 @@ public sealed class CostGovernorService(
         try
         {
             var budget = await GetOrCreateBudgetAsync(parsedUserId, cancellationToken);
+            
+            // 1. CHECK SEMANTIC CACHE FIRST (Zero Cost Fallback)
+            var cacheMatch = cachePort is null
+                ? null
+                : await cachePort.FindSemanticMatchAsync(semanticQuery, cancellationToken);
+                
+            if (cacheMatch is not null)
+            {
+                return CostGovernorResult.Cached(
+                    cacheMatch.Response,
+                    0m, // Zero cost for cache hit
+                    budget.AvailableAmount.Amount);
+            }
+
             var primaryCost = EstimateCost(estimatedTokens, pricePerThousandTokens);
 
+            // 2. TRY PRIMARY MODEL
             var primaryReservation = await TryReserveAsync(
                 budget,
                 primaryCost,
@@ -51,12 +66,14 @@ public sealed class CostGovernorService(
                 return primaryReservation;
             }
 
+            // 3. TRY FALLBACK MODEL
             var fallbackModel = modelRouter is null
                 ? null
                 : await modelRouter.GetCheaperModelAsync(pricePerThousandTokens, cancellationToken);
             fallbackModel ??= new ModelRoute(
                 "fallback",
                 pricePerThousandTokens * MockFallbackRateMultiplier);
+                
             if (fallbackModel is not null && fallbackModel.PricePerThousandTokens < pricePerThousandTokens)
             {
                 var fallbackCost = EstimateCost(estimatedTokens, fallbackModel.PricePerThousandTokens);
@@ -73,17 +90,7 @@ public sealed class CostGovernorService(
                 primaryCost = fallbackCost;
             }
 
-            var cacheMatch = cachePort is null
-                ? null
-                : await cachePort.FindSemanticMatchAsync(semanticQuery, cancellationToken);
-            if (cacheMatch is not null)
-            {
-                return CostGovernorResult.Cached(
-                    cacheMatch.Response,
-                    primaryCost.Amount,
-                    budget.AvailableAmount.Amount);
-            }
-
+            // 4. BLOCKED
             return CostGovernorResult.Blocked(primaryCost.Amount, budget.AvailableAmount.Amount);
         }
         finally

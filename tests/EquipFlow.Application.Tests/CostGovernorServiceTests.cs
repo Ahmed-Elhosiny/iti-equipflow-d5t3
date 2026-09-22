@@ -98,6 +98,56 @@ public sealed class CostGovernorServiceTests
         Assert.Equal(0.99925m, budget.AvailableAmount.Amount);
         Assert.Empty(budget.Reservations);
     }
+        [Fact]
+    public async Task EstimateAndReserveAsync_ReturnsCacheHitAndDoesNotReserveBudget_WhenCacheMatches()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var initialBudget = Money.FromDecimal(10m);
+        var budget = new UserBudget(userId, initialBudget);
+        var repository = new FakeUserBudgetRepository(budget);
+        var cache = new FakeCachePort(new SemanticCacheMatch("pump overheating", "Check bearings and coolant."));
+        var service = CreateService(repository, new FakeModelRouter(null), cache);
+
+        // Act
+        var result = await service.EstimateAndReserveAsync(
+            userId.ToString(), 
+            3000, 
+            0.01m, 
+            semanticQuery: "pump overheating");
+
+        // Assert
+        Assert.Equal(CostGovernorStatus.Cached, result.Status);
+        Assert.Equal("Check bearings and coolant.", result.CachedResponse);
+        Assert.Equal(0m, result.EstimatedCost); // Zero cost
+        Assert.Equal(10m, result.RemainingBudget); // Budget untouched
+        Assert.Empty(budget.Reservations); // No reservation created
+    }
+
+    [Fact]
+    public async Task EstimateAndReserveAsync_ReservesBudget_WhenCacheMisses()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var initialBudget = Money.FromDecimal(10m);
+        var budget = new UserBudget(userId, initialBudget);
+        var repository = new FakeUserBudgetRepository(budget);
+        var cache = new FakeCachePort(null); // Cache miss
+        var service = CreateService(repository, new FakeModelRouter(null), cache);
+
+        // Act
+        var result = await service.EstimateAndReserveAsync(
+            userId.ToString(), 
+            3000, 
+            0.01m, 
+            semanticQuery: "unique query");
+
+        // Assert
+        Assert.Equal(CostGovernorStatus.Reserved, result.Status);
+        Assert.NotNull(result.ReservationId);
+        Assert.NotEmpty(budget.Reservations); // Reservation created
+        Assert.True(budget.AvailableAmount.Amount < 10m); // Budget reduced
+    }
 
     private static CostGovernorService CreateService(
         FakeUserBudgetRepository repository,

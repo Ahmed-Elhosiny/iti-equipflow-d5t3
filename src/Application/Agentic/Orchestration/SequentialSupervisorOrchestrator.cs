@@ -59,7 +59,8 @@ public sealed class SequentialSupervisorOrchestrator(
                 resolvedUserId,
                 estimatedTokens: 3000,
                 pricePerThousandTokens: 0.01m,
-                workflowToken);
+                workflowToken,
+                semanticQuery: request.SymptomDescription);
 
             if (reservation.Status == CostGovernorStatus.Blocked)
             {
