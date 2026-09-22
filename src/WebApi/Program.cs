@@ -135,6 +135,7 @@ builder.Services.AddScoped<IAgent<DiagnosticPlanInput, DiagnosticPlanOutput>>(se
 builder.Services.AddScoped<WorkOrderGeneratorAgent>();
 builder.Services.AddScoped<IAgent<WorkOrderInput, WorkOrderOutput>>(serviceProvider =>
     serviceProvider.GetRequiredService<WorkOrderGeneratorAgent>());
+builder.Services.AddSingleton<EquipFlow.Application.Ports.ICachePort, EquipFlow.Infrastructure.Search.InMemorySemanticCacheAdapter>();
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
 builder.Services.AddScoped<SequentialSupervisorOrchestrator>();
 builder.Services.AddRagSearchInfrastructure();
