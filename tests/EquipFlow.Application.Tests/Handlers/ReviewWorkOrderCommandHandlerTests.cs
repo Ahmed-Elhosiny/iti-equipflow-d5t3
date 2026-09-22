@@ -349,4 +349,98 @@ public class ReviewWorkOrderCommandHandlerTests
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(() => handler.HandleAsync(command));
     }
+
+        [Fact]
+    public async Task HandleAsync_EditsAndApprovesPendingApprovalWorkOrder()
+    {
+        // Arrange
+        var repository = new FakeWorkOrderRepository();
+        var reviewHandler = new ReviewWorkOrderCommandHandler(repository);
+        
+        var createHandler = new CreateWorkOrderCommandHandler(repository);
+        var createCommand = new CreateWorkOrderCommand("Test Title", "Test Symptom", "Test Equipment", "Test User");
+        var workOrderId = await createHandler.HandleAsync(createCommand);
+
+        var addHandler = new AddSafetyPrerequisiteCommandHandler(repository);
+        var addCommand = new AddSafetyPrerequisiteCommand(workOrderId, "Wear safety goggles", true, 1);
+        await addHandler.HandleAsync(addCommand);
+
+        var workOrder = repository.GetSavedWorkOrder(workOrderId);
+        var prerequisiteId = workOrder!.SafetyPrerequisites.First().Id;
+
+        var completeHandler = new CompleteSafetyPrerequisiteCommandHandler(repository);
+        var completeCommand = new CompleteSafetyPrerequisiteCommand(workOrderId, prerequisiteId, "Test User", null);
+        await completeHandler.HandleAsync(completeCommand);
+
+        var submitHandler = new SubmitWorkOrderForApprovalCommandHandler(repository);
+        var submitCommand = new SubmitWorkOrderForApprovalCommand(workOrderId, "Test User");
+        await submitHandler.HandleAsync(submitCommand);
+
+        var command = new ReviewWorkOrderCommand(
+            workOrderId,
+            WorkOrderReviewDecision.EditAndApprove,
+            "Approver User",
+            "Adjusted details",
+            null, // CorrelationId
+            "New Title",
+            "New Symptom",
+            null, null, null, null);
+
+        // Act
+        await reviewHandler.HandleAsync(command);
+
+        // Assert
+        var savedWorkOrder = repository.GetSavedWorkOrder(workOrderId);
+        Assert.NotNull(savedWorkOrder);
+        Assert.Equal(WorkOrderStatus.Approved, savedWorkOrder.Status);
+        Assert.Equal("New Title", savedWorkOrder.Title);
+        Assert.Equal("New Symptom", savedWorkOrder.Symptom);
+        Assert.Equal("Approver User", savedWorkOrder.DecisionBy);
+    }
+
+    [Fact]
+    public async Task HandleAsync_RecordsApprovalActionTypeEditedAndApproved()
+    {
+        // Arrange
+        var repository = new FakeWorkOrderRepository();
+        var reviewHandler = new ReviewWorkOrderCommandHandler(repository);
+        
+        var createHandler = new CreateWorkOrderCommandHandler(repository);
+        var createCommand = new CreateWorkOrderCommand("Test Title", "Test Symptom", "Test Equipment", "Test User");
+        var workOrderId = await createHandler.HandleAsync(createCommand);
+
+        var addHandler = new AddSafetyPrerequisiteCommandHandler(repository);
+        var addCommand = new AddSafetyPrerequisiteCommand(workOrderId, "Wear safety goggles", true, 1);
+        await addHandler.HandleAsync(addCommand);
+
+        var workOrder = repository.GetSavedWorkOrder(workOrderId);
+        var prerequisiteId = workOrder!.SafetyPrerequisites.First().Id;
+
+        var completeHandler = new CompleteSafetyPrerequisiteCommandHandler(repository);
+        var completeCommand = new CompleteSafetyPrerequisiteCommand(workOrderId, prerequisiteId, "Test User", null);
+        await completeHandler.HandleAsync(completeCommand);
+
+        var submitHandler = new SubmitWorkOrderForApprovalCommandHandler(repository);
+        var submitCommand = new SubmitWorkOrderForApprovalCommand(workOrderId, "Test User");
+        await submitHandler.HandleAsync(submitCommand);
+
+        var command = new ReviewWorkOrderCommand(
+            workOrderId,
+            WorkOrderReviewDecision.EditAndApprove,
+            "Approver User",
+            null,
+            null,
+            "New Title",
+            null, null, null, null, null);
+
+        // Act
+        await reviewHandler.HandleAsync(command);
+
+        // Assert
+        var savedWorkOrder = repository.GetSavedWorkOrder(workOrderId);
+        Assert.NotNull(savedWorkOrder);
+        var editedAction = Assert.Single(savedWorkOrder.ApprovalActions.Where(a => a.ActionType == ApprovalActionType.EditedAndApproved));
+        Assert.Equal("Approver User", editedAction.ActorUserId);
+        Assert.Contains("Edited: Title", editedAction.Comment);
+    }
 }

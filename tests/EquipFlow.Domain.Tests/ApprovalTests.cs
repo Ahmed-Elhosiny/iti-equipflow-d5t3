@@ -99,4 +99,81 @@ public class ApprovalTests
         Assert.Equal("approver-456", workOrder.DecisionBy);
         Assert.NotNull(workOrder.DecisionAtUtc);
     }
+
+          [Fact]
+    public void EditAndApprove_Throws_When_WorkOrder_Is_Not_PendingApproval()
+    {
+        // Arrange
+        var workOrder = new WorkOrder(
+            title: "Test Work Order",
+            symptom: "Equipment malfunction",
+            equipmentName: "Pump-101",
+            createdBy: "user-123");
+
+        // Act & Assert
+        var act = () => workOrder.EditAndApprove("approver-456", null, "New Title", null, null, null, null, null);
+        Assert.Throws<InvalidOperationException>(act);
+    }
+
+    [Fact]
+    public void EditAndApprove_Succeeds_And_Updates_Fields_When_PendingApproval()
+    {
+        // Arrange
+        var workOrder = CreateSubmittedWorkOrder();
+
+        // Act
+        workOrder.EditAndApprove(
+            approverUserId: "approver-456",
+            comment: "Updated priority",
+            title: "Updated Title",
+            symptom: "Updated Symptom",
+            equipmentName: "Pump-102",
+            equipmentAssetNumber: "AST-999",
+            manualRevision: "Rev 2",
+            location: "Building B");
+
+        // Assert
+        Assert.Equal(WorkOrderStatus.Approved, workOrder.Status);
+        Assert.Equal("approver-456", workOrder.DecisionBy);
+        Assert.NotNull(workOrder.DecisionAtUtc);
+        Assert.Equal("Updated Title", workOrder.Title);
+        Assert.Equal("Updated Symptom", workOrder.Symptom);
+        Assert.Equal("Pump-102", workOrder.EquipmentName);
+        Assert.Equal("AST-999", workOrder.EquipmentAssetNumber);
+        Assert.Equal("Rev 2", workOrder.ManualRevision);
+        Assert.Equal("Building B", workOrder.Location);
+    }
+
+    [Fact]
+    public void EditAndApprove_Records_EditedAndApproved_ActionType_In_Audit_Log()
+    {
+        // Arrange
+        var workOrder = CreateSubmittedWorkOrder();
+
+        // Act
+        workOrder.EditAndApprove("approver-456", "Minor edits", "New Title", null, null, null, null, null);
+
+        // Assert
+        var action = Assert.Single(workOrder.ApprovalActions.Where(a => a.ActionType == ApprovalActionType.EditedAndApproved));
+        Assert.Equal("approver-456", action.ActorUserId);
+        Assert.Contains("Edited: Title", action.Comment);
+        Assert.Contains("Minor edits", action.Comment);
+    }
+
+    [Fact]
+    public void EditAndApprove_Does_Not_Update_Fields_When_Null_Or_Empty_Provided()
+    {
+        // Arrange
+        var workOrder = CreateSubmittedWorkOrder();
+        var originalTitle = workOrder.Title;
+        var originalSymptom = workOrder.Symptom;
+
+        // Act
+        workOrder.EditAndApprove("approver-456", null, null, null, null, null, null, null);
+
+        // Assert
+        Assert.Equal(WorkOrderStatus.Approved, workOrder.Status);
+        Assert.Equal(originalTitle, workOrder.Title);
+        Assert.Equal(originalSymptom, workOrder.Symptom);
+    }  
 }
