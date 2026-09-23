@@ -39,10 +39,11 @@ public sealed class CostGovernorEvalTests : IClassFixture<CostGovernorWebApplica
         Assert.Equal(0m, budget.ReservedAmount.Amount);
     }
 
-    [Fact]
+        [Fact]
     public async Task InsufficientBudget_ReturnsStructuredRefusalWithoutCallingLlmOrDeductingBudget()
     {
-        var userId = await SeedBudgetAsync(0.01m);
+        // Budget is set lower than the cost of the cheapest fallback model (gpt-4o-mini = 0.00054m)
+        var userId = await SeedBudgetAsync(0.0001m); 
         var callCount = 0;
 
         var result = await ExecuteBillableRequestAsync(userId, 3000, 0.01m, () => callCount++);
@@ -65,10 +66,13 @@ public sealed class CostGovernorEvalTests : IClassFixture<CostGovernorWebApplica
         var result = await ExecuteBillableRequestAsync(userId, 3000, 0.01m, () => callCount++);
 
         Assert.Equal(CostGovernorStatus.Reserved, result.Status);
-        Assert.Equal("fallback", result.ModelName);
-        Assert.Equal(0.018m, result.EstimatedCost);
+        // The smart router now cascades to gpt-4o-mini instead of a generic "fallback"
+        Assert.Equal("gpt-4o-mini", result.ModelName); 
+        // 3000 tokens * 0.00015 price * 1.2 safety margin = 0.00054m
+        Assert.Equal(0.00054m, result.EstimatedCost); 
         Assert.Equal(1, callCount);
     }
+
 
     [Fact]
     public async Task ConcurrentRequests_ReserveOnlyWithinAvailableBudget()
