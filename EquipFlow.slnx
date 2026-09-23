@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Application/EquipFlow.Application.csproj" />
     <Project Path="src/Domain/EquipFlow.Domain.csproj" />
+    <Project Path="src/EquipFlow.Cli/EquipFlow.Cli.csproj" />
     <Project Path="src/Infrastructure/EquipFlow.Infrastructure.csproj" />
     <Project Path="src/WebApi/EquipFlow.WebApi.csproj" />
   </Folder>

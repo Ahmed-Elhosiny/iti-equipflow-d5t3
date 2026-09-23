@@ -44,4 +44,4 @@ build/
 *.tar.gz
 *.whl
 *.egg-info/
-```
+.equipflow-token
