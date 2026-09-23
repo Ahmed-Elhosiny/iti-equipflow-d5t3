@@ -5,7 +5,6 @@ using EquipFlow.Application.Agentic.Contracts;
 using EquipFlow.Application.Agentic.Orchestration;
 using EquipFlow.Application.Budget.Ports;
 using EquipFlow.Application.Budget.Services;
-using EquipFlow.Application.CostGovernor.Queries;
 using EquipFlow.Application.Ports;
 using EquipFlow.Application.Search.Queries;
 using EquipFlow.Application.WorkOrders.Ports;
@@ -22,7 +21,6 @@ using EquipFlow.WebApi.Options;
 using EquipFlow.WebApi.Health;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -136,23 +134,27 @@ builder.Services.AddScoped<WorkOrderGeneratorAgent>();
 builder.Services.AddScoped<IAgent<WorkOrderInput, WorkOrderOutput>>(serviceProvider =>
     serviceProvider.GetRequiredService<WorkOrderGeneratorAgent>());
 builder.Services.AddSingleton<EquipFlow.Application.Ports.ICachePort, EquipFlow.Infrastructure.Search.InMemorySemanticCacheAdapter>();
+builder.Services.AddScoped<EquipFlow.Application.Ports.IModelRouter, EquipFlow.Infrastructure.LLM.BudgetAwareModelRouter>();
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
 builder.Services.AddScoped<SequentialSupervisorOrchestrator>();
 builder.Services.AddRagSearchInfrastructure();
 
 builder.Services.AddLLMProviders(builder.Configuration);
 
-var defaultLlmProvider = builder.Configuration["Llm:DefaultProvider"] ?? "Ollama";
+var primaryProvider = builder.Configuration["Llm:DefaultProvider"] ?? "OpenAI";
+var fallbackProvider = builder.Configuration["Llm:FallbackProvider"] ?? "Ollama";
+var providerChain = new List<string> { primaryProvider, fallbackProvider };
 
 builder.Services.AddScoped<ILLMProvider>(serviceProvider =>
     new ConfiguredLlmProvider(
         serviceProvider.GetRequiredService<EquipFlow.Application.Ports.LLM.ILLMProviderFactory>(),
-        defaultLlmProvider));
+        providerChain,
+        serviceProvider.GetRequiredService<ILogger<ConfiguredLlmProvider>>()));
 
 builder.Services.AddScoped<EquipFlow.Application.Ports.LLM.ILLMGenerationPort>(serviceProvider =>
     serviceProvider
         .GetRequiredService<EquipFlow.Application.Ports.LLM.ILLMProviderFactory>()
-        .GetProvider(defaultLlmProvider));
+        .GetProvider(primaryProvider));
 
 builder.Services.AddEquipFlowTools();
 builder.Services.AddSingleton<EquipFlow.Application.Agentic.Abstractions.IActiveRunRegistry, EquipFlow.Infrastructure.Agentic.ActiveRunRegistry>();
@@ -248,37 +250,75 @@ public partial class Program;
 
 file sealed class ConfiguredLlmProvider(
     EquipFlow.Application.Ports.LLM.ILLMProviderFactory providerFactory,
-    string providerName) : ILLMProvider
+    IReadOnlyList<string> providerChain,
+    ILogger<ConfiguredLlmProvider> logger) : ILLMProvider
 {
     public async Task<CompletionResult> CompleteAsync(
         CompletionRequest request,
         CancellationToken cancellationToken = default)
     {
-        var result = await GetProvider().CompleteAsync(
-            BuildRequest(request),
-            cancellationToken);
+        Exception? lastException = null;
+        foreach (var providerName in providerChain)
+        {
+            try
+            {
+                var generationPort = providerFactory.GetProvider(providerName);
+                var llmRequest = BuildRequest(request);
+                var result = await generationPort.CompleteAsync(llmRequest, cancellationToken);
 
-        return new CompletionResult(
-            result.Content ?? string.Empty,
-            new TokenUsage(result.PromptTokens, result.CompletionTokens),
-            result.FinishReason,
-            result.ToolCalls?.Select(toolCall => new ToolCall(
-                toolCall.Id,
-                toolCall.Name,
-                toolCall.ArgumentsJson)).ToArray());
+                return new CompletionResult(
+                    result.Content ?? string.Empty,
+                    new TokenUsage(result.PromptTokens, result.CompletionTokens),
+                    result.FinishReason,
+                    result.ToolCalls?.Select(toolCall => new ToolCall(
+                        toolCall.Id,
+                        toolCall.Name,
+                        toolCall.ArgumentsJson)).ToArray());
+            }
+            catch (Exception ex) when (IsTransient(ex))
+            {
+                logger.LogWarning(ex, "Transient failure on provider {ProviderName}. Trying next in cascade.", providerName);
+                lastException = ex;
+            }
+        }
+
+        throw new InvalidOperationException("All LLM providers in the fallback chain failed.", lastException);
     }
 
-    public async IAsyncEnumerable<StreamingChunk> StreamAsync(
+           public async IAsyncEnumerable<StreamingChunk> StreamAsync(
         CompletionRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var llmRequest = BuildRequest(request);
-
-        await foreach (var chunk in GetProvider().StreamAsync(llmRequest, cancellationToken))
+        Exception? lastException = null;
+        foreach (var providerName in providerChain)
         {
-            yield return new StreamingChunk(chunk.DeltaContent ?? string.Empty, chunk.IsFinished);
+            IAsyncEnumerable<EquipFlow.Application.Ports.LLM.LLMStreamChunk>? stream = null;
+            try
+            {
+                var generationPort = providerFactory.GetProvider(providerName);
+                var llmRequest = BuildRequest(request);
+                stream = generationPort.StreamAsync(llmRequest, cancellationToken);
+            }
+            catch (Exception ex) when (IsTransient(ex))
+            {
+                logger.LogWarning(ex, "Transient failure initializing stream on {ProviderName}. Trying next in cascade.", providerName);
+                lastException = ex;
+                continue;
+            }
+
+            // Yielding happens outside the try-catch block to satisfy C# iterator rules
+            await foreach (var chunk in stream.WithCancellation(cancellationToken))
+            {
+                yield return new StreamingChunk(chunk.DeltaContent ?? string.Empty, chunk.IsFinished);
+            }
+            
+            yield break; // Successfully completed streaming from this provider
         }
+
+        throw new InvalidOperationException("All LLM providers in the fallback chain failed.", lastException);
     }
+    private static bool IsTransient(Exception ex) =>
+        ex is HttpRequestException or TaskCanceledException or TimeoutException;
 
     public Task<EmbeddingResult> GenerateEmbeddingAsync(
         string text,
@@ -318,7 +358,4 @@ file sealed class ConfiguredLlmProvider(
             request.Temperature,
             request.MaxTokens);
     }
-
-    private EquipFlow.Application.Ports.LLM.ILLMGenerationPort GetProvider() =>
-        providerFactory.GetProvider(providerName);
 }
