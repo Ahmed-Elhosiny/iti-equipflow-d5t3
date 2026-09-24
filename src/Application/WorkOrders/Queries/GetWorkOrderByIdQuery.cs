@@ -6,16 +6,26 @@ using MediatR;
 
 namespace EquipFlow.Application.WorkOrders.Queries;
 
-public sealed record GetWorkOrderByIdQuery(Guid WorkOrderId) : IRequest<WorkOrderDto>;
+public sealed record GetWorkOrderByIdQuery(Guid WorkOrderId, string RequestingUserId) : IRequest<WorkOrderDto>;
 
 public sealed class GetWorkOrderByIdQueryHandler(IWorkOrderRepository repository)
     : IRequestHandler<GetWorkOrderByIdQuery, WorkOrderDto>
 {
     public async Task<WorkOrderDto> Handle(
         GetWorkOrderByIdQuery request,
-        CancellationToken cancellationToken) =>
-        WorkOrderDto.FromDomain(await repository.GetByIdAsync(request.WorkOrderId, cancellationToken)
-            ?? throw new WorkOrderNotFoundException(request.WorkOrderId));
+        CancellationToken cancellationToken)
+    {
+        var workOrder = await repository.GetByIdAsync(request.WorkOrderId, cancellationToken)
+            ?? throw new WorkOrderNotFoundException(request.WorkOrderId);
+
+        // Object-level authorization: Fail closed with 404 to prevent resource enumeration
+        if (!string.Equals(workOrder.CreatedBy, request.RequestingUserId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new WorkOrderNotFoundException(request.WorkOrderId);
+        }
+
+        return WorkOrderDto.FromDomain(workOrder);
+    }
 }
 
 public sealed record WorkOrderDto(

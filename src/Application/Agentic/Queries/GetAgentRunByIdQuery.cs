@@ -2,7 +2,7 @@ using MediatR;
 
 namespace EquipFlow.Application.Agentic.Queries;
 
-public sealed record GetAgentRunByIdQuery(Guid CorrelationId) : IRequest<AgentRunDto?>;
+public sealed record GetAgentRunByIdQuery(Guid CorrelationId, string RequestingUserId) : IRequest<AgentRunDto?>;
 
 public sealed record AgentRunDto(
     Guid CorrelationId,
