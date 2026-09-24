@@ -13,7 +13,7 @@ public interface ICostGovernor
         CancellationToken cancellationToken = default,
         string? semanticQuery = null);
 
-    Task CommitAsync(
+    Task<bool> CommitAsync( // <-- CHANGED TO Task<bool>
         string userId,
         Guid reservationId,
         decimal actualUsageCost,
@@ -82,8 +82,10 @@ public sealed record CostGovernorResult(
         decimal remainingBudget) =>
         new(CostGovernorStatus.Cached, null, null, "semantic_cache_hit", estimatedCost, remainingBudget, response);
 
+    // <-- ADDED OPTIONAL REASON PARAMETER
     public static CostGovernorResult Blocked(
         decimal estimatedCost,
-        decimal remainingBudget) =>
-        new(CostGovernorStatus.Blocked, null, null, "budget_exhausted", estimatedCost, remainingBudget);
+        decimal remainingBudget,
+        string reason = "budget_exhausted") =>
+        new(CostGovernorStatus.Blocked, null, null, reason, estimatedCost, remainingBudget);
 }
