@@ -31,7 +31,7 @@ public sealed class StaticAgentToolRegistry : IAgentToolRegistry
             },
             ["WorkOrderGenerator"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "CreateWorkOrder",
+                "DraftWorkOrder",
                 "ValidateBudget"
             }
         };

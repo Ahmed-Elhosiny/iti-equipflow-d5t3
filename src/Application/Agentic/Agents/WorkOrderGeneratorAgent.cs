@@ -18,9 +18,9 @@ public sealed class WorkOrderGeneratorAgent(
             "Validate the estimated work order cost against the user's available budget.",
             WorkflowToolSchemas.ValidateBudgetSchema),
         new(
-            "CreateWorkOrder",
-            "Create the approved work order as a draft in the maintenance system.",
-            WorkflowToolSchemas.CreateWorkOrderSchema)
+            "DraftWorkOrder",
+            "Draft the approved work order details for the maintenance system. This does not save to the database.",
+            WorkflowToolSchemas.DraftWorkOrderSchema)
     ];
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -30,7 +30,7 @@ public sealed class WorkOrderGeneratorAgent(
         Draft a precise work order from the diagnostic plan and safety prerequisites supplied by the user.
         The work order must include a clear title, actionable description, required parts, priority, and estimated cost.
         Include every mandatory safety prerequisite in the description. Do not invent diagnostic evidence or safety controls.
-        You may use only ValidateBudget and CreateWorkOrder. Validate the budget before creating the work order.
+        You may use only ValidateBudget and DraftWorkOrder. Validate the budget before drafting the work order.
         Return strictly valid JSON only when asked for the final work order summary.
         The JSON must match this contract exactly:
         {
@@ -61,7 +61,7 @@ public sealed class WorkOrderGeneratorAgent(
             {JsonSerializer.Serialize(input.DiagnosticPlan, JsonOptions)}
 
             Use the diagnostic steps and safety prerequisites above to determine the title, description,
-            required parts, priority, and estimated cost. Request ValidateBudget before CreateWorkOrder.
+            required parts, priority, and estimated cost. Request ValidateBudget before DraftWorkOrder.
             """;
 
         var completion = await AgentEventRecorder.CompleteAsync(
@@ -75,7 +75,7 @@ public sealed class WorkOrderGeneratorAgent(
         if (completion.ToolCalls is null || completion.ToolCalls.Count == 0)
         {
             return Failure<WorkOrderOutput>(
-                "The work order generator did not request budget validation and work order creation.");
+                "The work order generator did not request budget validation and work order drafting.");
         }
 
         foreach (var toolCall in completion.ToolCalls)
@@ -111,26 +111,25 @@ public sealed class WorkOrderGeneratorAgent(
             }
         }
 
-        var createCall = completion.ToolCalls.FirstOrDefault(
-            toolCall => string.Equals(toolCall.Name, "CreateWorkOrder", StringComparison.OrdinalIgnoreCase));
-        if (createCall is null)
+        var draftCall = completion.ToolCalls.FirstOrDefault(
+            toolCall => string.Equals(toolCall.Name, "DraftWorkOrder", StringComparison.OrdinalIgnoreCase));
+        if (draftCall is null)
         {
             return Failure<WorkOrderOutput>(
-                "The budget was approved, but the work order generator did not request creation.");
+                "The budget was approved, but the work order generator did not request drafting.");
         }
 
-        var created = await DispatchAsync(createCall, context, cancellationToken);
-        if (!created.Succeeded)
+        var drafted = await DispatchAsync(draftCall, context, cancellationToken);
+        if (!drafted.Succeeded)
         {
             return Failure<WorkOrderOutput>(
-                created.ErrorMessage ?? "Work order creation failed.");
+                drafted.ErrorMessage ?? "Work order drafting failed.");
         }
 
-        var createdWorkOrderId = ReadWorkOrderId(created.ResultJson);
         var finalCompletion = await AgentEventRecorder.CompleteAsync(
             llmProvider,
             new CompletionRequest(
-                $"{userPrompt}\n\nBudget validation result:\n{approvedBudget!.ResultJson}\n\nCreateWorkOrder result:\n{created.ResultJson}\n\nReturn the final work order summary now.",
+                $"{userPrompt}\n\nBudget validation result:\n{approvedBudget!.ResultJson}\n\nDraftWorkOrder result:\n{drafted.ResultJson}\n\nReturn the final work order summary now.",
                 SystemPrompt),
             context,
             Name,
@@ -145,12 +144,12 @@ public sealed class WorkOrderGeneratorAgent(
             return new AgentResult<WorkOrderOutput>(
                 output with
                 {
-                    WorkOrderId = createdWorkOrderId ?? output.WorkOrderId,
+                    WorkOrderId = null, // Draft only, DB persistence happens at the API/Orchestrator layer
                     Summary = string.IsNullOrWhiteSpace(output.Summary)
                         ? output.Description
                         : output.Summary,
                     EstimatedCost = output.EstimatedCost == 0
-                        ? ReadEstimatedCost(createCall.ArgumentsJson)
+                        ? ReadEstimatedCost(draftCall.ArgumentsJson)
                         : output.EstimatedCost,
                     RequiredParts = output.RequiredParts ?? []
                 },
@@ -209,20 +208,6 @@ public sealed class WorkOrderGeneratorAgent(
             error = $"Budget validation returned invalid structured output: {exception.Message}";
             return false;
         }
-    }
-
-    private static Guid? ReadWorkOrderId(string? resultJson)
-    {
-        if (string.IsNullOrWhiteSpace(resultJson))
-        {
-            return null;
-        }
-
-        using var document = JsonDocument.Parse(resultJson);
-        return document.RootElement.TryGetProperty("WorkOrderId", out var id)
-            && id.TryGetGuid(out var workOrderId)
-            ? workOrderId
-            : null;
     }
 
     private static decimal ReadEstimatedCost(string argumentsJson)

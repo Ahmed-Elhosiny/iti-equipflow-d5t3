@@ -226,8 +226,8 @@ public sealed class DeterministicToolDispatcher : IToolDispatcher
         ToolInvocationRequest request,
         CancellationToken cancellationToken = default)
     {
-        var result = request.ToolName.Equals("CreateWorkOrder", StringComparison.OrdinalIgnoreCase)
-            ? "{\"WorkOrderId\":\"20202020-2020-2020-2020-202020202020\"}"
+        var result = request.ToolName.Equals("DraftWorkOrder", StringComparison.OrdinalIgnoreCase)
+            ? "{\"Success\":true,\"Status\":\"Drafted\"}"
             : "{\"IsApproved\":true,\"RemainingBudget\":9.50,\"RejectionReason\":null}";
 
         return Task.FromResult(new ToolDispatchResult(

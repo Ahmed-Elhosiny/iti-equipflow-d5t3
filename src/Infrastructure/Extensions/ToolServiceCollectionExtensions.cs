@@ -44,7 +44,7 @@ public static class ToolServiceCollectionExtensions
         services.AddScoped<IToolExecutor, QueryFaultHistoryExecutor>();
         services.AddScoped<IToolExecutor, GetEquipmentSpecsExecutor>();
         services.AddScoped<IToolExecutor, GenerateSafetyChecklistExecutor>();
-        services.AddScoped<IToolExecutor, CreateWorkOrderExecutor>();
+        services.AddScoped<IToolExecutor, DraftWorkOrderExecutor>();
         services.AddScoped<IToolExecutor, ValidateBudgetExecutor>();
         services.AddScoped<IToolExecutor, CheckApprovalStatusExecutor>();
         services.AddScoped<IToolExecutor, EmitAgentEventExecutor>();
