@@ -117,13 +117,13 @@ public class MockLlmProvider : ILLMProvider
             return Task.FromResult(JsonResult($"{{\"Title\":\"Inspect overheating pump P-101\",\"Description\":\"Inspect bearings and coupling after lockout/tagout.\",\"RequiredParts\":[],\"Priority\":\"High\",\"WorkOrderId\":null,\"Summary\":\"Pump inspection draft\",\"EstimatedCost\":125.00}}"));
         }
 
-        return Task.FromResult(new CompletionResult(
+            return Task.FromResult(new CompletionResult(
             "",
             new TokenUsage(1, 1),
             ToolCalls:
             [
                 new ToolCall("validate-budget", "ValidateBudget", $"{{\"equipmentId\":\"{EquipmentId}\",\"estimatedCost\":125.00}}"),
-                new ToolCall("create-work-order", "CreateWorkOrder", $"{{\"equipmentId\":\"{EquipmentId}\",\"title\":\"Inspect overheating pump P-101\",\"description\":\"Inspect bearings and coupling after lockout/tagout.\",\"estimatedCost\":125.00,\"requiredParts\":[],\"safetyPrerequisites\":[\"Apply lockout/tagout before inspection\"]}}")
+                new ToolCall("draft-work-order", "DraftWorkOrder", $"{{\"equipmentId\":\"{EquipmentId}\",\"title\":\"Inspect overheating pump P-101\",\"description\":\"Inspect bearings and coupling after lockout/tagout.\",\"estimatedCost\":125.00,\"requiredParts\":[],\"safetyPrerequisites\":[\"Apply lockout/tagout before inspection\"]}}")
             ]));
     }
 

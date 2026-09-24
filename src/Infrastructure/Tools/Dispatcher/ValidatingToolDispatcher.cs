@@ -24,7 +24,7 @@ public sealed class ValidatingToolDispatcher : IToolDispatcher
             ["QueryFaultHistory"] = ToolSchemas.QueryFaultHistorySchema,
             ["GetEquipmentSpecs"] = ToolSchemas.GetEquipmentSpecsSchema,
             ["GenerateSafetyChecklist"] = ToolSchemas.GenerateSafetyChecklistSchema,
-            ["CreateWorkOrder"] = WorkflowToolSchemas.CreateWorkOrderSchema,
+            ["CreateWorkOrder"] = WorkflowToolSchemas.DraftWorkOrderSchema,
             ["ValidateBudget"] = WorkflowToolSchemas.ValidateBudgetSchema,
             ["CheckApprovalStatus"] = WorkflowToolSchemas.CheckApprovalStatusSchema,
             ["EmitAgentEvent"] = WorkflowToolSchemas.EmitAgentEventSchema
