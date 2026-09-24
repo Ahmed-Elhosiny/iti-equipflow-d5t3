@@ -1,9 +1,9 @@
 namespace EquipFlow.Application.Tools.Definitions;
 
 /// <summary>
-/// Request for creating a work order.
+/// Request for drafting a work order.
 /// </summary>
-public sealed record CreateWorkOrderRequest(
+public sealed record DraftWorkOrderRequest(
     Guid EquipmentId,
     string Title,
     string Description,
@@ -12,9 +12,9 @@ public sealed record CreateWorkOrderRequest(
     IReadOnlyList<string> SafetyPrerequisites);
 
 /// <summary>
-/// Response from creating a work order.
+/// Response from drafting a work order.
 /// </summary>
-public sealed record CreateWorkOrderResponse(Guid WorkOrderId, string Status);
+public sealed record DraftWorkOrderResponse(bool Success, string Status);
 
 /// <summary>
 /// Request for validating an estimated work order cost with the Cost Governor.
@@ -64,12 +64,12 @@ public sealed record EmitAgentEventResponse(bool Success);
 public static class WorkflowToolSchemas
 {
     /// <summary>
-    /// JSON schema for <see cref="CreateWorkOrderRequest"/>.
+    /// JSON schema for <see cref="DraftWorkOrderRequest"/>.
     /// </summary>
-    public const string CreateWorkOrderSchema = """
+    public const string DraftWorkOrderSchema = """
         {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "title": "CreateWorkOrderRequest",
+          "title": "DraftWorkOrderRequest",
           "type": "object",
           "properties": {
             "equipmentId": {

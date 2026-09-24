@@ -81,9 +81,9 @@ public sealed class StaticAgentToolRegistryTests
     }
 
     [Fact]
-    public void WorkOrderGenerator_AllowsCreateWorkOrder()
+    public void WorkOrderGenerator_AllowsDraftWorkOrder()
     {
         var registry = new StaticAgentToolRegistry();
-        Assert.True(registry.IsToolAllowed("WorkOrderGenerator", "CreateWorkOrder"));
+        Assert.True(registry.IsToolAllowed("WorkOrderGenerator", "DraftWorkOrder"));
     }
 }
