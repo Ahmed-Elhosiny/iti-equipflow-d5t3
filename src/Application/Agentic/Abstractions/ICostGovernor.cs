@@ -17,12 +17,14 @@ public interface ICostGovernor
         string userId,
         Guid reservationId,
         decimal actualUsageCost,
+        string? runId = null,
         CancellationToken cancellationToken = default);
 
     Task<bool> ReconcileAsync(
         string reservationId,
         EquipFlow.Domain.Budget.ValueObjects.TokenUsage actualUsage,
         string modelUsed,
+        string? runId = null,
         CancellationToken cancellationToken = default);
 
     Task ReleaseAsync(

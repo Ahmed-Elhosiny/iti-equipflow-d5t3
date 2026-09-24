@@ -145,6 +145,7 @@ public sealed class SequentialSupervisorOrchestrator(
                 reservationId.Value.ToString(),
                 actualUsage,
                 modelUsed,
+                correlationId.ToString(),
                 workflowToken);
             if (!reconciled)
             {
