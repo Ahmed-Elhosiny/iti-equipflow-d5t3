@@ -126,42 +126,61 @@ public sealed class WorkOrderGeneratorAgent(
                 drafted.ErrorMessage ?? "Work order drafting failed.");
         }
 
-        var finalCompletion = await AgentEventRecorder.CompleteAsync(
-            llmProvider,
-            new CompletionRequest(
-                $"{userPrompt}\n\nBudget validation result:\n{approvedBudget!.ResultJson}\n\nDraftWorkOrder result:\n{drafted.ResultJson}\n\nReturn the final work order summary now.",
-                SystemPrompt),
-            context,
-            Name,
-            2,
-            cancellationToken);
+        // --- BOUNDED RETRY LOOP STARTS HERE ---
+        var finalUserPrompt = $"{userPrompt}\n\nBudget validation result:\n{approvedBudget!.ResultJson}\n\nDraftWorkOrder result:\n{drafted.ResultJson}\n\nReturn the final work order summary now.";
 
-        try
+        const int MaxRetries = 2;
+        string? lastError = null;
+        WorkOrderOutput? output = null;
+
+        for (int attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            var output = JsonSerializer.Deserialize<WorkOrderOutput>(finalCompletion.Text, JsonOptions)
-                ?? throw new JsonException("The work order generator returned an empty result.");
+            string promptForAttempt = finalUserPrompt;
+            if (lastError is not null)
+            {
+                promptForAttempt += $"\n\nYour previous response was invalid JSON and failed to parse with the following error:\n{lastError}\nPlease correct your response and return strictly valid JSON matching the schema. Do not include Markdown or commentary.";
+            }
 
-            return new AgentResult<WorkOrderOutput>(
-                output with
+            var finalCompletion = await AgentEventRecorder.CompleteAsync(
+                llmProvider,
+                new CompletionRequest(promptForAttempt, SystemPrompt),
+                context,
+                Name,
+                2 + attempt,
+                cancellationToken);
+
+            try
+            {
+                output = JsonSerializer.Deserialize<WorkOrderOutput>(finalCompletion.Text, JsonOptions)
+                    ?? throw new JsonException("The work order generator returned an empty result.");
+                break; // Success, exit loop
+            }
+            catch (JsonException exception)
+            {
+                lastError = exception.Message;
+                if (attempt == MaxRetries)
                 {
-                    WorkOrderId = null, // Draft only, DB persistence happens at the API/Orchestrator layer
-                    Summary = string.IsNullOrWhiteSpace(output.Summary)
-                        ? output.Description
-                        : output.Summary,
-                    EstimatedCost = output.EstimatedCost == 0
-                        ? ReadEstimatedCost(draftCall.ArgumentsJson)
-                        : output.EstimatedCost,
-                    RequiredParts = output.RequiredParts ?? []
-                },
-                []);
+                    return Failure<WorkOrderOutput>(
+                        $"The work order generator returned invalid structured output after {MaxRetries + 1} attempts: {lastError}");
+                }
+            }
         }
-        catch (JsonException exception)
-        {
-            return Failure<WorkOrderOutput>(
-                $"The work order generator returned invalid structured output: {exception.Message}");
-        }
-    }
+        // --- BOUNDED RETRY LOOP ENDS HERE ---
 
+        return new AgentResult<WorkOrderOutput>(
+            output! with
+            {
+                WorkOrderId = null, 
+                Summary = string.IsNullOrWhiteSpace(output!.Summary)
+                    ? output.Description
+                    : output.Summary,
+                EstimatedCost = output.EstimatedCost == 0
+                    ? ReadEstimatedCost(draftCall.ArgumentsJson)
+                    : output.EstimatedCost,
+                RequiredParts = output.RequiredParts ?? []
+            },
+            []);
+    }
     private async Task<ToolDispatchResult> DispatchAsync(
         ToolCall toolCall,
         IAgentContext context,
