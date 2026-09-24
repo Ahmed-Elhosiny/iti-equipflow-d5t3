@@ -26,7 +26,8 @@ public sealed record AgentRunStarted(
     string AgentName,
     int StepIndex,
     string InputSummary,
-    int TimeoutMs)
+    int TimeoutMs,
+    string UserId = "system")
     : AgentEventBase(CorrelationId, Timestamp, AgentName, StepIndex);
 
 /// <summary>

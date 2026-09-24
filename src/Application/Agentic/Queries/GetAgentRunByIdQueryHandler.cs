@@ -22,6 +22,13 @@ public sealed class GetAgentRunByIdQueryHandler(IAgentEventStore eventStore)
         }
 
         var startedEvent = events.OfType<AgentRunStarted>().FirstOrDefault();
+        
+        // Object-level authorization: Fail closed with 404 to prevent enumeration
+        if (startedEvent is null || !string.Equals(startedEvent.UserId, request.RequestingUserId, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
         var completedEvent = events.OfType<AgentRunCompleted>().FirstOrDefault();
 
         return new AgentRunDto(

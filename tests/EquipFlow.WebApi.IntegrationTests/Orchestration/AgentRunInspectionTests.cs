@@ -54,11 +54,16 @@ public sealed class AgentRunInspectionTests : IClassFixture<EquipFlowWebApplicat
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
-    private async Task SeedRunAsync(Guid correlationId)
+      private async Task SeedRunAsync(Guid correlationId)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var eventStore = scope.ServiceProvider.GetRequiredService<IAgentEventStore>();
         var startedAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        
+        // The TestAuthHandler authenticates as this specific user ID.
+        // We must seed the run with this exact UserId so the object-level 
+        // authorization check in GetAgentRunByIdQueryHandler passes.
+        var testUserId = "00000000-0000-0000-0000-000000000001";
 
         await eventStore.AppendRangeAsync(
         [
@@ -68,7 +73,8 @@ public sealed class AgentRunInspectionTests : IClassFixture<EquipFlowWebApplicat
                 "InspectionTestAgent",
                 0,
                 "test run",
-                120000),
+                120000,
+                testUserId), // <-- Explicitly pass the test user ID
             new AgentRunCompleted(
                 correlationId,
                 startedAt.AddMinutes(1),
@@ -80,7 +86,6 @@ public sealed class AgentRunInspectionTests : IClassFixture<EquipFlowWebApplicat
                 "completed")
         ]);
     }
-
     private sealed record RunInspectionResponse(
         Guid CorrelationId,
         string? Status,

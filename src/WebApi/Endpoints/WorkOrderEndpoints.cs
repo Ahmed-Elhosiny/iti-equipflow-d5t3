@@ -232,15 +232,22 @@ public static class WorkOrderEndpoints
         }
     }
 
-    private static async Task<IResult> GetById(
+      private static async Task<IResult> GetById(
         Guid id,
+        ClaimsPrincipal user,
         ISender sender,
         CancellationToken cancellationToken)
     {
+        var userId = user.GetUserId();
+        if (!userId.HasValue)
+        {
+            return Results.Unauthorized();
+        }
+
         try
         {
             var workOrder = await sender.Send(
-                new GetWorkOrderByIdQuery(id),
+                new GetWorkOrderByIdQuery(id, userId.Value.ToString()),
                 cancellationToken);
             return Results.Ok(workOrder);
         }

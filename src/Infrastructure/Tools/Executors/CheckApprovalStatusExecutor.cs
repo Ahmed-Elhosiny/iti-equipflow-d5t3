@@ -52,7 +52,7 @@ public sealed class CheckApprovalStatusExecutor(ISender sender) : IToolExecutor
             }
 
             var workOrder = await sender.Send(
-                new GetWorkOrderByIdQuery(request.WorkOrderId),
+                new GetWorkOrderByIdQuery(request.WorkOrderId, userId ?? string.Empty),
                 cancellationToken);
             if (workOrder is null)
             {
@@ -98,7 +98,8 @@ public sealed class CheckApprovalStatusExecutor(ISender sender) : IToolExecutor
         try
         {
             using var document = JsonDocument.Parse(request.ArgumentsJson);
-            var result = await ExecuteAsync(document.RootElement, null, cancellationToken);
+            // Extract the UserId from the ToolInvocationContext to satisfy the object-level authorization check
+            var result = await ExecuteAsync(document.RootElement, request.Context.UserId.ToString(), cancellationToken);
 
             return new ToolDispatchResult(
                 request.ToolName,

@@ -190,13 +190,20 @@ public static class AiEndpoints
         return cancelled ? Results.NoContent() : Results.NotFound();
     }
 
-    private static async Task<IResult> GetAgentRunById(
+       private static async Task<IResult> GetAgentRunById(
         Guid runId,
+        ClaimsPrincipal user,
         ISender sender,
         CancellationToken cancellationToken)
     {
+        var userId = user.GetUserId();
+        if (!userId.HasValue)
+        {
+            return Results.Unauthorized();
+        }
+
         var result = await sender.Send(
-            new GetAgentRunByIdQuery(runId),
+            new GetAgentRunByIdQuery(runId, userId.Value.ToString()),
             cancellationToken);
 
         return result is null ? Results.NotFound() : Results.Ok(result);
