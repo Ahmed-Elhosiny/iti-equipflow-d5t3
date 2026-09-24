@@ -11,6 +11,7 @@ namespace EquipFlow.Application.Budget.Services;
 
 public sealed class CostGovernorService(
     IUserBudgetRepository userBudgetRepository,
+    IRunSpendRepository runSpendRepository,
     ITransactionManager transactionManager,
     ILogger<CostGovernorService> logger,
     IModelRouter? modelRouter = null,
@@ -100,6 +101,7 @@ public sealed class CostGovernorService(
         string reservationId,
         EquipFlow.Domain.Budget.ValueObjects.TokenUsage actualUsage,
         string modelUsed,
+        string? runId = null, // <-- ADDED PARAMETER HERE
         CancellationToken cancellationToken = default)
     {
         if (!Guid.TryParse(reservationId, out var parsedReservationId)) return false;
@@ -136,6 +138,20 @@ public sealed class CostGovernorService(
         }
 
         lockedBudget.Commit(parsedReservationId, actualCost);
+        
+        // --- ADDED RUN SPEND LEDGER LOGIC HERE ---
+        if (!string.IsNullOrWhiteSpace(runId) && Guid.TryParse(runId, out var parsedRunId))
+        {
+            var spend = new RunSpend(
+                parsedRunId, 
+                lockedBudget.UserId, 
+                reservation.EstimatedCost, 
+                actualCost, 
+                modelUsed);
+            await runSpendRepository.AddAsync(spend, cancellationToken);
+        }
+        // -----------------------------------------
+
         await userBudgetRepository.UpdateAsync(lockedBudget, cancellationToken);
         await uow.CommitAsync(cancellationToken);
         
@@ -143,11 +159,27 @@ public sealed class CostGovernorService(
         return true;
     }
 
-    public async Task CommitAsync(string userId, Guid reservationId, decimal actualUsageCost, CancellationToken cancellationToken = default)
+    public async Task CommitAsync(string userId, Guid reservationId, decimal actualUsageCost, string? runId = null, CancellationToken cancellationToken = default)
     {
         await using var uow = await transactionManager.BeginTransactionAsync(cancellationToken);
         var budget = await GetRequiredBudgetForUpdateAsync(ParseUserId(userId), cancellationToken);
+        
+        var reservation = budget.Reservations.FirstOrDefault(r => r.Id == reservationId);
+        var reservedAmount = reservation?.EstimatedCost ?? Money.FromDecimal(0);
+
         budget.Commit(reservationId, Money.FromDecimal(actualUsageCost));
+        
+        if (!string.IsNullOrWhiteSpace(runId) && Guid.TryParse(runId, out var parsedRunId))
+        {
+            var spend = new RunSpend(
+                parsedRunId, 
+                budget.UserId, 
+                reservedAmount, 
+                Money.FromDecimal(actualUsageCost), 
+                "unknown");
+            await runSpendRepository.AddAsync(spend, cancellationToken);
+        }
+
         await userBudgetRepository.UpdateAsync(budget, cancellationToken);
         await uow.CommitAsync(cancellationToken);
     }

@@ -21,6 +21,7 @@ public class EquipFlowDbContext : DbContext
     public DbSet<Document> Documents => Set<Document>();
     public DbSet<DocumentChunk> DocumentChunks => Set<DocumentChunk>();
     public DbSet<AgentEventEntity> AgentEvents => Set<AgentEventEntity>();
+    public DbSet<RunSpend> RunSpends { get; set; } = null!;
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

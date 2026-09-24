@@ -140,6 +140,7 @@ builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
 builder.Services.AddHostedService<EquipFlow.Infrastructure.BackgroundServices.BudgetResetBackgroundService>();
 builder.Services.AddScoped<SequentialSupervisorOrchestrator>();
 builder.Services.AddRagSearchInfrastructure();
+builder.Services.AddScoped<EquipFlow.Application.Budget.Ports.IRunSpendRepository, EquipFlow.Infrastructure.Persistence.Repositories.RunSpendRepository>();
 
 builder.Services.AddLLMProviders(builder.Configuration);
 

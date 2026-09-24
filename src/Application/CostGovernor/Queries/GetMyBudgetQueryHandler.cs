@@ -5,7 +5,9 @@ using MediatR;
 
 namespace EquipFlow.Application.CostGovernor.Queries;
 
-public sealed class GetMyBudgetQueryHandler(IUserBudgetRepository userBudgetRepository)
+public sealed class GetMyBudgetQueryHandler(
+    IUserBudgetRepository userBudgetRepository,
+    IRunSpendRepository runSpendRepository)
     : IRequestHandler<GetMyBudgetQuery, BudgetSummaryDto>
 {
     public async Task<BudgetSummaryDto> Handle(
@@ -15,24 +17,25 @@ public sealed class GetMyBudgetQueryHandler(IUserBudgetRepository userBudgetRepo
         var budget = await userBudgetRepository.GetByUserIdAsync(request.UserId, cancellationToken)
             ?? throw new InvalidOperationException($"No budget exists for user '{request.UserId}'.");
 
-        return MapBudget(budget);
+        var runSpends = await runSpendRepository.GetByUserIdAsync(request.UserId, cancellationToken);
+
+        return MapBudget(budget, runSpends);
     }
 
-    private static BudgetSummaryDto MapBudget(UserBudget budget) =>
+    private static BudgetSummaryDto MapBudget(UserBudget budget, IEnumerable<RunSpend> runSpends) =>
         new(
             budget.UserId,
             budget.TotalLimit.Amount,
             budget.ConsumedAmount.Amount,
             budget.ReservedAmount.Amount,
             budget.AvailableAmount.Amount,
-            budget.Reservations
-                .OrderByDescending(reservation => reservation.CreatedAt)
-                .Select(reservation => new RunHistoryDto(
-                    reservation.Id,
-                    reservation.CreatedAt,
-                    string.Empty,
-                    reservation.EstimatedCost.Amount,
-                    0m,
-                    "Reserved"))
+            runSpends
+                .Select(spend => new RunHistoryDto(
+                    spend.RunId,
+                    spend.CreatedAtUtc.UtcDateTime,
+                    spend.ModelUsed,
+                    spend.ReservedAmount.Amount,
+                    spend.ActualAmount.Amount,
+                    "Completed"))
                 .ToList());
 }
