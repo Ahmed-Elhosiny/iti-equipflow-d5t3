@@ -45,7 +45,8 @@ public sealed class SequentialSupervisorOrchestrator(
             nameof(SequentialSupervisorOrchestrator),
             0,
             request.SymptomDescription,
-            (int)WorkflowTimeout.TotalMilliseconds));
+            (int)WorkflowTimeout.TotalMilliseconds,
+            resolvedUserId)); 
             
         onEvent?.Invoke(collectedEvents.Last());
 
