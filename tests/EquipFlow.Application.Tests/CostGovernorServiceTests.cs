@@ -155,6 +155,7 @@ public sealed class CostGovernorServiceTests
         ICachePort? cache = null) =>
         new(
             repository,
+            new FakeRunSpendRepository(),
             new FakeTransactionManager(),
             NullLogger<CostGovernorService>.Instance,
             router,
@@ -221,4 +222,12 @@ public sealed class CostGovernorServiceTests
         public Task<IEnumerable<UserBudget>> GetBudgetsNeedingResetAsync(DateTimeOffset currentDate, CancellationToken ct) =>
         Task.FromResult<IEnumerable<UserBudget>>(Array.Empty<UserBudget>());
     }
+        private sealed class FakeRunSpendRepository : IRunSpendRepository
+    {
+        public Task AddAsync(RunSpend spend, CancellationToken ct) => Task.CompletedTask;
+        
+        public Task<IEnumerable<RunSpend>> GetByUserIdAsync(Guid userId, CancellationToken ct) =>
+            Task.FromResult<IEnumerable<RunSpend>>(Array.Empty<RunSpend>());
+    }
 }
+
