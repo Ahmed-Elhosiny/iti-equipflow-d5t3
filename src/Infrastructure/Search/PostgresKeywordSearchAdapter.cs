@@ -47,11 +47,10 @@ public sealed class PostgresKeywordSearchAdapter : IKeywordSearchPort
                 (chunk, document) => new { Chunk = chunk, Document = document })
             .Where(candidate => candidate.Document.Status == DocumentStatus.Ready);
 
-        // TODO: Replace these temporary mappings with explicit equipment, line, and version metadata fields for FR-013.
         if (query.Filters.EquipmentId is not null)
         {
             candidates = candidates.Where(candidate =>
-                candidate.Document.Metadata.Source == query.Filters.EquipmentId);
+                candidate.Chunk.EquipmentId == query.Filters.EquipmentId);
         }
 
         if (query.Filters.DocumentType is not null)
@@ -63,7 +62,7 @@ public sealed class PostgresKeywordSearchAdapter : IKeywordSearchPort
         if (query.Filters.ProductionLine is not null)
         {
             candidates = candidates.Where(candidate =>
-                candidate.Document.Metadata.Section == query.Filters.ProductionLine);
+                candidate.Chunk.ProductionLine == query.Filters.ProductionLine);
         }
 
         if (query.Filters.DocumentVersion is not null)

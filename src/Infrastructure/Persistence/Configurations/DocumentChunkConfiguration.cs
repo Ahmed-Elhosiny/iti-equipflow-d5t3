@@ -23,6 +23,14 @@ public sealed class DocumentChunkConfiguration : IEntityTypeConfiguration<Docume
         builder.Property(chunk => chunk.TokenCount)
             .IsRequired();
 
+        builder.Property(chunk => chunk.EquipmentId)
+            .HasMaxLength(255)
+            .HasColumnName("equipment_id");
+
+        builder.Property(chunk => chunk.ProductionLine)
+            .HasMaxLength(255)
+            .HasColumnName("production_line");
+
         builder.Property(chunk => chunk.Embedding)
             .HasConversion(
                 value => value.IsEmpty ? null : new Vector(value.ToArray()),
@@ -59,5 +67,7 @@ public sealed class DocumentChunkConfiguration : IEntityTypeConfiguration<Docume
         });
 
         builder.HasIndex(chunk => chunk.DocumentId);
+        builder.HasIndex(chunk => chunk.EquipmentId);
+        builder.HasIndex(chunk => chunk.ProductionLine);
     }
 }
