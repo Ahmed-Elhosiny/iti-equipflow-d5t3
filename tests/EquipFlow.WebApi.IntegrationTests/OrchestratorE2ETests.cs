@@ -82,9 +82,14 @@ public sealed class OrchestratorE2ETests : IClassFixture<EquipFlowWebApplication
 
             services.RemoveAll<IToolDispatcher>();
             services.AddScoped<IToolDispatcher, DeterministicToolDispatcher>();
+
+            // ADD THIS: Bypass EF InMemory transaction limitations
+            services.RemoveAll<EquipFlow.Application.Ports.ITransactionManager>();
+            services.AddScoped<EquipFlow.Application.Ports.ITransactionManager, NoOpTransactionManager>();
         });
     }
 }
+
 
 public class MockLlmProvider : ILLMProvider
 {
@@ -242,6 +247,9 @@ public sealed class InMemoryUserBudgetRepository : IUserBudgetRepository
     public Task<UserBudget?> GetByUserIdAsync(Guid userId, CancellationToken ct) =>
         Task.FromResult(budgets.GetValueOrDefault(userId));
 
+    public Task<UserBudget?> GetByUserIdForUpdateAsync(Guid userId, CancellationToken ct) =>
+        Task.FromResult(budgets.GetValueOrDefault(userId));
+
     public Task<IEnumerable<UserBudget>> GetAllAsync(CancellationToken ct) =>
         Task.FromResult<IEnumerable<UserBudget>>(budgets.Values.ToArray());
 
@@ -286,5 +294,16 @@ public sealed class TestAuthHandler(
         var identity = new System.Security.Claims.ClaimsIdentity(claims, TestScheme);
         return Task.FromResult(AuthenticateResult.Success(
             new AuthenticationTicket(new System.Security.Claims.ClaimsPrincipal(identity), TestScheme)));
+    }
+}
+public sealed class NoOpTransactionManager : EquipFlow.Application.Ports.ITransactionManager
+{
+    public Task<EquipFlow.Application.Ports.IUnitOfWork> BeginTransactionAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<EquipFlow.Application.Ports.IUnitOfWork>(new NoOpUnitOfWork());
+
+    private sealed class NoOpUnitOfWork : EquipFlow.Application.Ports.IUnitOfWork
+    {
+        public Task CommitAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }
