@@ -2,6 +2,7 @@ using System.Diagnostics;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Agentic.Contracts;
 using EquipFlow.Application.Agentic.Events;
+using EquipFlow.Application.Ports;
 using EquipFlow.Domain.Budget.ValueObjects;
 using Microsoft.Extensions.Logging;
 
@@ -13,7 +14,8 @@ public sealed class SequentialSupervisorOrchestrator(
     IAgent<WorkOrderInput, WorkOrderOutput> workOrderGenerator,
     ICostGovernor costGovernor,
     IAgentEventStore agentEventStore,
-    ILogger<SequentialSupervisorOrchestrator> logger)
+    ILogger<SequentialSupervisorOrchestrator> logger,
+    ICachePort? cachePort = null)
 {
     private const string MockUserId = "00000000-0000-0000-0000-000000000001";
     private static readonly TimeSpan AgentTimeout = TimeSpan.FromSeconds(45);
@@ -151,6 +153,20 @@ public sealed class SequentialSupervisorOrchestrator(
 
             finalStatus = AgentRunStatus.Success;
             outputSummary = workOrderResult.Output.Summary;
+
+            // Write to semantic cache for future zero-cost fallbacks (Fail-Open)
+            if (cachePort is not null && !string.IsNullOrWhiteSpace(outputSummary))
+            {
+                try
+                {
+                    await cachePort.AddAsync(request.SymptomDescription, outputSummary, workflowToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to write successful workflow result to semantic cache.");
+                }
+            }
+
             return WorkflowResult.PendingApproval(workOrderResult.Output);
         }
         catch (OperationCanceledException exception) when (workflowToken.IsCancellationRequested)

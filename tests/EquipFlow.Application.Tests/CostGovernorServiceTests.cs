@@ -180,9 +180,18 @@ public sealed class CostGovernorServiceTests
             Task.FromResult(route);
     }
 
-    private sealed class FakeCachePort(SemanticCacheMatch? match) : ICachePort
+       private sealed class FakeCachePort(SemanticCacheMatch? match) : ICachePort
     {
         public string? LastQuery { get; private set; }
+        public string? LastAddedQuery { get; private set; }
+        public string? LastAddedResponse { get; private set; }
+
+        public Task AddAsync(string query, string response, CancellationToken cancellationToken = default)
+        {
+            LastAddedQuery = query;
+            LastAddedResponse = response;
+            return Task.CompletedTask;
+        }
 
         public Task<SemanticCacheMatch?> FindSemanticMatchAsync(
             string? semanticQuery,
