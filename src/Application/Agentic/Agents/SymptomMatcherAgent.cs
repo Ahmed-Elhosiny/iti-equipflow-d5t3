@@ -28,7 +28,7 @@ public sealed class SymptomMatcherAgent(
 
     public string Name => "SymptomMatcher";
 
-       public async Task<AgentResult<SymptomMatchOutput>> ExecuteAsync(
+        public async Task<AgentResult<SymptomMatchOutput>> ExecuteAsync(
         SymptomMatchInput input,
         IAgentContext context,
         CancellationToken cancellationToken = default)
@@ -42,22 +42,32 @@ public sealed class SymptomMatcherAgent(
             .Replace("{EquipmentId}", input.EquipmentIdHint ?? "unknown", StringComparison.Ordinal)
             .Replace("{Evidence}", "No evidence retrieved yet.", StringComparison.Ordinal);
 
-        var systemPromptWithTools = $"{prompt.SystemPrompt}\nYou may use the supplied SearchManuals and QueryFaultHistory tools when evidence is needed.";
-
-        var completion = await AgentEventRecorder.CompleteAsync(
-            llmProvider,
-            new CompletionRequest(baseUserPrompt, systemPromptWithTools, Tools: AllowedTools),
-            context,
-            Name,
-            1,
-            cancellationToken);
-
         var evidence = new List<EvidenceChunk>();
-        string finalUserPrompt = baseUserPrompt;
-        string? initialText = null;
+        
+        const int MaxIterations = 5;
+        int iteration = 0;
+        string currentPrompt = baseUserPrompt;
+        string currentSystemPrompt = $"{prompt.SystemPrompt}\nYou may use the supplied SearchManuals and QueryFaultHistory tools when evidence is needed.";
+        string? finalText = null;
 
-        if (completion.ToolCalls is not null)
+        // --- BOUNDED ITERATION LOOP (FR-024 / AG-008) ---
+        while (iteration < MaxIterations)
         {
+            iteration++;
+            var completion = await AgentEventRecorder.CompleteAsync(
+                llmProvider,
+                new CompletionRequest(currentPrompt, currentSystemPrompt, Tools: AllowedTools),
+                context,
+                Name,
+                iteration,
+                cancellationToken);
+
+            if (completion.ToolCalls is null || completion.ToolCalls.Count == 0)
+            {
+                finalText = completion.Text;
+                break; // LLM provided final answer, exit tool loop
+            }
+
             foreach (var toolCall in completion.ToolCalls)
             {
                 if (!AllowedTools.Any(tool => string.Equals(tool.Name, toolCall.Name, StringComparison.OrdinalIgnoreCase)))
@@ -70,7 +80,7 @@ public sealed class SymptomMatcherAgent(
                     new ToolInvocationRequest(toolCall.Name, toolCall.ArgumentsJson, CreateInvocationContext(context)),
                     context,
                     Name,
-                    1,
+                    iteration,
                     toolCall.Id,
                     cancellationToken);
 
@@ -87,15 +97,20 @@ public sealed class SymptomMatcherAgent(
                 {
                     return Failure<SymptomMatchOutput>($"Tool '{toolCall.Name}' returned invalid evidence: {exception.Message}");
                 }
+
+                currentPrompt += $"\n\nTool '{toolCall.Name}' result:\n{dispatchResult.ResultJson}";
             }
-
-            finalUserPrompt = $"{baseUserPrompt}\n\nRetrieved evidence:\n{JsonSerializer.Serialize(evidence, JsonOptions)}";
+            
+            currentSystemPrompt = $"{prompt.SystemPrompt}\nYou have retrieved evidence. You may use more tools if needed, or return the final JSON output if you have enough information.";
         }
-        else
+
+        if (finalText is null)
         {
-            initialText = completion.Text;
+            // Iteration Breaker Triggered
+            return Failure<SymptomMatchOutput>($"Agent '{Name}' exceeded maximum tool-calling iterations ({MaxIterations}) without producing a final output.");
         }
 
+        // --- JSON SCHEMA RETRY LOOP ---
         const int MaxRetries = 2;
         string? lastError = null;
         SymptomMatchOutput? output = null;
@@ -104,24 +119,20 @@ public sealed class SymptomMatcherAgent(
         {
             string textToParse;
             
-            if (attempt == 0 && initialText is not null)
+            if (attempt == 0)
             {
-                textToParse = initialText;
+                textToParse = finalText;
             }
             else
             {
-                string promptForAttempt = finalUserPrompt;
-                if (lastError is not null)
-                {
-                    promptForAttempt += $"\n\nYour previous response was invalid JSON and failed to parse with the following error:\n{lastError}\nPlease correct your response and return strictly valid JSON matching the schema. Do not include Markdown or commentary.";
-                }
+                string promptForAttempt = $"{currentPrompt}\n\nYour previous response was invalid JSON and failed to parse with the following error:\n{lastError}\nPlease correct your response and return strictly valid JSON matching the schema. Do not include Markdown or commentary.";
 
                 var finalCompletion = await AgentEventRecorder.CompleteAsync(
                     llmProvider,
                     new CompletionRequest(promptForAttempt, prompt.SystemPrompt),
                     context,
                     Name,
-                    completion.ToolCalls is not null ? 2 : 1 + attempt,
+                    iteration + attempt,
                     cancellationToken);
                     
                 textToParse = finalCompletion.Text;

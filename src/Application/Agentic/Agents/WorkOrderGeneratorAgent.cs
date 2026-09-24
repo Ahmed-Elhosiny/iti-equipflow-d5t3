@@ -46,7 +46,7 @@ public sealed class WorkOrderGeneratorAgent(
 
     public string Name => "WorkOrderGenerator";
 
-    public async Task<AgentResult<WorkOrderOutput>> ExecuteAsync(
+      public async Task<AgentResult<WorkOrderOutput>> ExecuteAsync(
         WorkOrderInput input,
         IAgentContext context,
         CancellationToken cancellationToken = default)
@@ -54,7 +54,7 @@ public sealed class WorkOrderGeneratorAgent(
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(context);
 
-        var userPrompt = $"""
+        var baseUserPrompt = $"""
             Draft a work order for equipment {input.EquipmentId}.
 
             Diagnostic plan:
@@ -64,96 +64,109 @@ public sealed class WorkOrderGeneratorAgent(
             required parts, priority, and estimated cost. Request ValidateBudget before DraftWorkOrder.
             """;
 
-        var completion = await AgentEventRecorder.CompleteAsync(
-            llmProvider,
-            new CompletionRequest(userPrompt, SystemPrompt, Tools: AllowedTools),
-            context,
-            Name,
-            1,
-            cancellationToken);
+        const int MaxIterations = 5;
+        int iteration = 0;
+        string currentPrompt = baseUserPrompt;
+        string currentSystemPrompt = SystemPrompt;
+        string? finalText = null;
+        
+        ToolDispatchResult? approvedBudget = null;
+        ToolCall? draftCall = null;
 
-        if (completion.ToolCalls is null || completion.ToolCalls.Count == 0)
+        // --- BOUNDED ITERATION LOOP (FR-024 / AG-008) ---
+        while (iteration < MaxIterations)
         {
-            return Failure<WorkOrderOutput>(
-                "The work order generator did not request budget validation and work order drafting.");
-        }
+            iteration++;
+            var completion = await AgentEventRecorder.CompleteAsync(
+                llmProvider,
+                new CompletionRequest(currentPrompt, currentSystemPrompt, Tools: AllowedTools),
+                context,
+                Name,
+                iteration,
+                cancellationToken);
 
-        foreach (var toolCall in completion.ToolCalls)
-        {
-            if (!AllowedTools.Any(tool => string.Equals(tool.Name, toolCall.Name, StringComparison.OrdinalIgnoreCase)))
+            if (completion.ToolCalls is null || completion.ToolCalls.Count == 0)
             {
-                return Failure<WorkOrderOutput>(
-                    $"Tool '{toolCall.Name}' is not allowed for agent '{Name}'.");
+                finalText = completion.Text;
+                break;
             }
+
+            foreach (var toolCall in completion.ToolCalls)
+            {
+                if (!AllowedTools.Any(tool => string.Equals(tool.Name, toolCall.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return Failure<WorkOrderOutput>($"Tool '{toolCall.Name}' is not allowed for agent '{Name}'.");
+                }
+
+                var dispatchResult = await DispatchAsync(toolCall, context, cancellationToken);
+                if (!dispatchResult.Succeeded)
+                {
+                    return Failure<WorkOrderOutput>(dispatchResult.ErrorMessage ?? $"Tool '{toolCall.Name}' failed.");
+                }
+
+                if (string.Equals(toolCall.Name, "ValidateBudget", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!IsBudgetApproved(dispatchResult.ResultJson, out var budgetError))
+                    {
+                        return Failure<WorkOrderOutput>(budgetError);
+                    }
+                    approvedBudget = dispatchResult;
+                }
+                else if (string.Equals(toolCall.Name, "DraftWorkOrder", StringComparison.OrdinalIgnoreCase))
+                {
+                    draftCall = toolCall;
+                }
+
+                currentPrompt += $"\n\nTool '{toolCall.Name}' result:\n{dispatchResult.ResultJson}";
+            }
+            
+            currentSystemPrompt = SystemPrompt + "\nYou have executed tools. You may use more tools if needed, or return the final JSON work order summary if you have completed drafting.";
         }
 
-        var budgetCalls = completion.ToolCalls
-            .Where(toolCall => string.Equals(toolCall.Name, "ValidateBudget", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (budgetCalls.Length == 0)
+        if (finalText is null)
+        {
+            // Iteration Breaker Triggered
+            return Failure<WorkOrderOutput>($"Agent '{Name}' exceeded maximum tool-calling iterations ({MaxIterations}) without producing a final output.");
+        }
+        
+        if (approvedBudget is null)
         {
             return Failure<WorkOrderOutput>("The work order generator must validate the budget before creation.");
         }
 
-        ToolDispatchResult? approvedBudget = null;
-        foreach (var toolCall in budgetCalls)
-        {
-            approvedBudget = await DispatchAsync(toolCall, context, cancellationToken);
-            if (!approvedBudget.Succeeded)
-            {
-                return Failure<WorkOrderOutput>(
-                    approvedBudget.ErrorMessage ?? "Budget validation failed.");
-            }
-
-            if (!IsBudgetApproved(approvedBudget.ResultJson, out var budgetError))
-            {
-                return Failure<WorkOrderOutput>(budgetError);
-            }
-        }
-
-        var draftCall = completion.ToolCalls.FirstOrDefault(
-            toolCall => string.Equals(toolCall.Name, "DraftWorkOrder", StringComparison.OrdinalIgnoreCase));
-        if (draftCall is null)
-        {
-            return Failure<WorkOrderOutput>(
-                "The budget was approved, but the work order generator did not request drafting.");
-        }
-
-        var drafted = await DispatchAsync(draftCall, context, cancellationToken);
-        if (!drafted.Succeeded)
-        {
-            return Failure<WorkOrderOutput>(
-                drafted.ErrorMessage ?? "Work order drafting failed.");
-        }
-
-        // --- BOUNDED RETRY LOOP STARTS HERE ---
-        var finalUserPrompt = $"{userPrompt}\n\nBudget validation result:\n{approvedBudget!.ResultJson}\n\nDraftWorkOrder result:\n{drafted.ResultJson}\n\nReturn the final work order summary now.";
-
+        // --- JSON SCHEMA RETRY LOOP ---
         const int MaxRetries = 2;
         string? lastError = null;
         WorkOrderOutput? output = null;
 
         for (int attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            string promptForAttempt = finalUserPrompt;
-            if (lastError is not null)
+            string textToParse;
+            
+            if (attempt == 0)
             {
-                promptForAttempt += $"\n\nYour previous response was invalid JSON and failed to parse with the following error:\n{lastError}\nPlease correct your response and return strictly valid JSON matching the schema. Do not include Markdown or commentary.";
+                textToParse = finalText;
             }
+            else
+            {
+                string promptForAttempt = $"{currentPrompt}\n\nYour previous response was invalid JSON and failed to parse with the following error:\n{lastError}\nPlease correct your response and return strictly valid JSON matching the schema. Do not include Markdown or commentary.";
 
-            var finalCompletion = await AgentEventRecorder.CompleteAsync(
-                llmProvider,
-                new CompletionRequest(promptForAttempt, SystemPrompt),
-                context,
-                Name,
-                2 + attempt,
-                cancellationToken);
+                var finalCompletion = await AgentEventRecorder.CompleteAsync(
+                    llmProvider,
+                    new CompletionRequest(promptForAttempt, SystemPrompt),
+                    context,
+                    Name,
+                    iteration + attempt,
+                    cancellationToken);
+                    
+                textToParse = finalCompletion.Text;
+            }
 
             try
             {
-                output = JsonSerializer.Deserialize<WorkOrderOutput>(finalCompletion.Text, JsonOptions)
+                output = JsonSerializer.Deserialize<WorkOrderOutput>(textToParse, JsonOptions)
                     ?? throw new JsonException("The work order generator returned an empty result.");
-                break; // Success, exit loop
+                break; 
             }
             catch (JsonException exception)
             {
@@ -165,7 +178,6 @@ public sealed class WorkOrderGeneratorAgent(
                 }
             }
         }
-        // --- BOUNDED RETRY LOOP ENDS HERE ---
 
         return new AgentResult<WorkOrderOutput>(
             output! with
@@ -174,7 +186,7 @@ public sealed class WorkOrderGeneratorAgent(
                 Summary = string.IsNullOrWhiteSpace(output!.Summary)
                     ? output.Description
                     : output.Summary,
-                EstimatedCost = output.EstimatedCost == 0
+                EstimatedCost = output.EstimatedCost == 0 && draftCall is not null
                     ? ReadEstimatedCost(draftCall.ArgumentsJson)
                     : output.EstimatedCost,
                 RequiredParts = output.RequiredParts ?? []

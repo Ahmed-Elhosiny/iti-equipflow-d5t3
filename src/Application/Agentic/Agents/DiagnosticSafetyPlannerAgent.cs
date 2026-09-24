@@ -42,7 +42,7 @@ public sealed class DiagnosticSafetyPlannerAgent(
 
     public string Name => "DiagnosticSafetyPlanner";
 
-     public async Task<AgentResult<DiagnosticPlanOutput>> ExecuteAsync(
+        public async Task<AgentResult<DiagnosticPlanOutput>> ExecuteAsync(
         DiagnosticPlanInput input,
         IAgentContext context,
         CancellationToken cancellationToken = default)
@@ -50,7 +50,7 @@ public sealed class DiagnosticSafetyPlannerAgent(
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(context);
 
-        var userPrompt = $"""
+        var baseUserPrompt = $"""
             Plan diagnostics for the following maintenance request.
 
             Equipment identifier:
@@ -65,23 +65,30 @@ public sealed class DiagnosticSafetyPlannerAgent(
             No tool results have been retrieved yet.
             """;
 
-        var completion = await AgentEventRecorder.CompleteAsync(
-            llmProvider,
-            new CompletionRequest(
-                userPrompt,
-                SystemPrompt + "\nYou may use only the supplied GetEquipmentSpecs and GenerateSafetyChecklist tools.",
-                Tools: AllowedTools),
-            context,
-            Name,
-            1,
-            cancellationToken);
+        const int MaxIterations = 5;
+        int iteration = 0;
+        string currentPrompt = baseUserPrompt;
+        string currentSystemPrompt = SystemPrompt + "\nYou may use only the supplied GetEquipmentSpecs and GenerateSafetyChecklist tools.";
+        string? finalText = null;
 
-        var toolResults = new List<string>();
-        string finalUserPrompt = userPrompt;
-        string? initialText = null;
-
-        if (completion.ToolCalls is not null)
+        // --- BOUNDED ITERATION LOOP (FR-024 / AG-008) ---
+        while (iteration < MaxIterations)
         {
+            iteration++;
+            var completion = await AgentEventRecorder.CompleteAsync(
+                llmProvider,
+                new CompletionRequest(currentPrompt, currentSystemPrompt, Tools: AllowedTools),
+                context,
+                Name,
+                iteration,
+                cancellationToken);
+
+            if (completion.ToolCalls is null || completion.ToolCalls.Count == 0)
+            {
+                finalText = completion.Text;
+                break;
+            }
+
             foreach (var toolCall in completion.ToolCalls)
             {
                 if (!AllowedTools.Any(tool => string.Equals(tool.Name, toolCall.Name, StringComparison.OrdinalIgnoreCase)))
@@ -94,7 +101,7 @@ public sealed class DiagnosticSafetyPlannerAgent(
                     new ToolInvocationRequest(toolCall.Name, toolCall.ArgumentsJson, CreateInvocationContext(context)),
                     context,
                     Name,
-                    1,
+                    iteration,
                     toolCall.Id,
                     cancellationToken);
 
@@ -103,18 +110,19 @@ public sealed class DiagnosticSafetyPlannerAgent(
                     return Failure<DiagnosticPlanOutput>(dispatchResult.ErrorMessage ?? $"Tool '{toolCall.Name}' failed.");
                 }
 
-                toolResults.Add(JsonSerializer.Serialize(
-                    new { Tool = toolCall.Name, Result = dispatchResult.ResultJson },
-                    JsonOptions));
+                currentPrompt += $"\n\nTool '{toolCall.Name}' result:\n{dispatchResult.ResultJson}";
             }
-
-            finalUserPrompt = $"{userPrompt}\n\nTool results:\n{string.Join("\n", toolResults)}\n\nReturn the final diagnostic plan now.";
+            
+            currentSystemPrompt = SystemPrompt + "\nYou have retrieved tool results. You may use more tools if needed, or return the final JSON diagnostic plan if you have enough information.";
         }
-        else
+
+        if (finalText is null)
         {
-            initialText = completion.Text;
+            // Iteration Breaker Triggered
+            return Failure<DiagnosticPlanOutput>($"Agent '{Name}' exceeded maximum tool-calling iterations ({MaxIterations}) without producing a final output.");
         }
 
+        // --- JSON SCHEMA RETRY LOOP ---
         const int MaxRetries = 2;
         string? lastError = null;
         DiagnosticPlanOutput? output = null;
@@ -123,24 +131,20 @@ public sealed class DiagnosticSafetyPlannerAgent(
         {
             string textToParse;
             
-            if (attempt == 0 && initialText is not null)
+            if (attempt == 0)
             {
-                textToParse = initialText;
+                textToParse = finalText;
             }
             else
             {
-                string promptForAttempt = finalUserPrompt;
-                if (lastError is not null)
-                {
-                    promptForAttempt += $"\n\nYour previous response was invalid JSON and failed to parse with the following error:\n{lastError}\nPlease correct your response and return strictly valid JSON matching the schema. Do not include Markdown or commentary.";
-                }
+                string promptForAttempt = $"{currentPrompt}\n\nYour previous response was invalid JSON and failed to parse with the following error:\n{lastError}\nPlease correct your response and return strictly valid JSON matching the schema. Do not include Markdown or commentary.";
 
                 var finalCompletion = await AgentEventRecorder.CompleteAsync(
                     llmProvider,
                     new CompletionRequest(promptForAttempt, SystemPrompt),
                     context,
                     Name,
-                    completion.ToolCalls is not null ? 2 : 1 + attempt,
+                    iteration + attempt,
                     cancellationToken);
                     
                 textToParse = finalCompletion.Text;
@@ -172,7 +176,7 @@ public sealed class DiagnosticSafetyPlannerAgent(
             },
             []);
     }
-    private ToolInvocationContext CreateInvocationContext(IAgentContext context) =>
+     private ToolInvocationContext CreateInvocationContext(IAgentContext context) =>
         new(
             ParseGuid(context.UserId),
             "Technician",
