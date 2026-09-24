@@ -112,7 +112,8 @@ public class MockLlmProvider : ILLMProvider
             return Task.FromResult(JsonResult("{\"Steps\":[{\"Description\":\"Inspect pump bearings and coupling\",\"EvidenceChunkId\":null}],\"SafetyPrerequisites\":[{\"Description\":\"Apply lockout/tagout before inspection\",\"IsMandatory\":true}],\"Reasoning\":\"The symptoms indicate a possible bearing or alignment fault.\"}"));
         }
 
-        if (request.Prompt.Contains("Budget validation result:", StringComparison.Ordinal))
+                if (request.Prompt.Contains("Tool 'DraftWorkOrder' result:", StringComparison.Ordinal) ||
+            request.Prompt.Contains("Budget validation result:", StringComparison.Ordinal))
         {
             return Task.FromResult(JsonResult($"{{\"Title\":\"Inspect overheating pump P-101\",\"Description\":\"Inspect bearings and coupling after lockout/tagout.\",\"RequiredParts\":[],\"Priority\":\"High\",\"WorkOrderId\":null,\"Summary\":\"Pump inspection draft\",\"EstimatedCost\":125.00}}"));
         }
@@ -168,7 +169,8 @@ public sealed class FailingMockLlmProvider : MockLlmProvider
         CompletionRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (request.Prompt.Contains("Budget validation result:", StringComparison.Ordinal))
+                if (request.Prompt.Contains("Tool 'DraftWorkOrder' result:", StringComparison.Ordinal) ||
+            request.Prompt.Contains("Budget validation result:", StringComparison.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(new CompletionResult(
