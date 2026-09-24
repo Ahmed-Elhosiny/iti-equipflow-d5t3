@@ -148,9 +148,36 @@ public sealed class CostGovernorServiceTests
         Assert.NotEmpty(budget.Reservations); // Reservation created
         Assert.True(budget.AvailableAmount.Amount < 10m); // Budget reduced
     }
+    [Fact]
+    public async Task EstimateAndReserveAsync_ReturnsBlocked_WhenBudgetStoreFails()
+    {
+        var userId = Guid.NewGuid();
+        var repository = new ThrowingUserBudgetRepository();
+        var service = CreateService(repository, new FakeModelRouter(null));
 
-        private static CostGovernorService CreateService(
-        FakeUserBudgetRepository repository,
+        var result = await service.EstimateAndReserveAsync(userId.ToString(), 3000, 0.01m);
+
+        Assert.Equal(CostGovernorStatus.Blocked, result.Status);
+        Assert.Equal("budget_store_unavailable", result.Reason);
+    }
+
+    [Fact]
+    public async Task ReconcileAsync_ReturnsFalse_WhenBudgetStoreFails()
+    {
+        var userId = Guid.NewGuid();
+        var repository = new ThrowingUserBudgetRepository();
+        var service = CreateService(repository, new FakeModelRouter(null));
+
+        var reconciled = await service.ReconcileAsync(
+            Guid.NewGuid().ToString(),
+            BudgetTokenUsage.FromActual(100, 100),
+            "gpt-4o-mini");
+
+        Assert.False(reconciled);
+    }
+
+           private static CostGovernorService CreateService(
+        IUserBudgetRepository repository, // <-- Changed from FakeUserBudgetRepository
         IModelRouter router,
         ICachePort? cache = null) =>
         new(
@@ -229,5 +256,15 @@ public sealed class CostGovernorServiceTests
         public Task<IEnumerable<RunSpend>> GetByUserIdAsync(Guid userId, CancellationToken ct) =>
             Task.FromResult<IEnumerable<RunSpend>>(Array.Empty<RunSpend>());
     }
+       private sealed class ThrowingUserBudgetRepository : IUserBudgetRepository
+    {
+        public Task<UserBudget?> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken) => throw new InvalidOperationException("DB down");
+        public Task<UserBudget?> GetByUserIdForUpdateAsync(Guid userId, CancellationToken cancellationToken) => throw new InvalidOperationException("DB down");
+        public Task<IEnumerable<UserBudget>> GetAllAsync(CancellationToken cancellationToken) => throw new InvalidOperationException("DB down");
+        public Task AddAsync(UserBudget budget, CancellationToken cancellationToken) => throw new InvalidOperationException("DB down");
+        public Task UpdateAsync(UserBudget budget, CancellationToken cancellationToken) => throw new InvalidOperationException("DB down");
+        public Task<IEnumerable<UserBudget>> GetBudgetsNeedingResetAsync(DateTimeOffset currentDate, CancellationToken ct) => throw new InvalidOperationException("DB down");
+    }
+    
 }
 
