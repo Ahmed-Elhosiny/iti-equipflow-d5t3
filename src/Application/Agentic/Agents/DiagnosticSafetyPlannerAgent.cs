@@ -42,7 +42,7 @@ public sealed class DiagnosticSafetyPlannerAgent(
 
     public string Name => "DiagnosticSafetyPlanner";
 
-    public async Task<AgentResult<DiagnosticPlanOutput>> ExecuteAsync(
+     public async Task<AgentResult<DiagnosticPlanOutput>> ExecuteAsync(
         DiagnosticPlanInput input,
         IAgentContext context,
         CancellationToken cancellationToken = default)
@@ -77,22 +77,21 @@ public sealed class DiagnosticSafetyPlannerAgent(
             cancellationToken);
 
         var toolResults = new List<string>();
+        string finalUserPrompt = userPrompt;
+        string? initialText = null;
+
         if (completion.ToolCalls is not null)
         {
             foreach (var toolCall in completion.ToolCalls)
             {
                 if (!AllowedTools.Any(tool => string.Equals(tool.Name, toolCall.Name, StringComparison.OrdinalIgnoreCase)))
                 {
-                    return Failure<DiagnosticPlanOutput>(
-                        $"Tool '{toolCall.Name}' is not allowed for agent '{Name}'.");
+                    return Failure<DiagnosticPlanOutput>($"Tool '{toolCall.Name}' is not allowed for agent '{Name}'.");
                 }
 
                 var dispatchResult = await AgentEventRecorder.DispatchAsync(
                     toolDispatcher,
-                    new ToolInvocationRequest(
-                        toolCall.Name,
-                        toolCall.ArgumentsJson,
-                        CreateInvocationContext(context)),
+                    new ToolInvocationRequest(toolCall.Name, toolCall.ArgumentsJson, CreateInvocationContext(context)),
                     context,
                     Name,
                     1,
@@ -101,8 +100,7 @@ public sealed class DiagnosticSafetyPlannerAgent(
 
                 if (!dispatchResult.Succeeded)
                 {
-                    return Failure<DiagnosticPlanOutput>(
-                        dispatchResult.ErrorMessage ?? $"Tool '{toolCall.Name}' failed.");
+                    return Failure<DiagnosticPlanOutput>(dispatchResult.ErrorMessage ?? $"Tool '{toolCall.Name}' failed.");
                 }
 
                 toolResults.Add(JsonSerializer.Serialize(
@@ -110,38 +108,70 @@ public sealed class DiagnosticSafetyPlannerAgent(
                     JsonOptions));
             }
 
-            completion = await AgentEventRecorder.CompleteAsync(
-                llmProvider,
-                new CompletionRequest(
-                    $"{userPrompt}\n\nTool results:\n{string.Join("\n", toolResults)}\n\nReturn the final diagnostic plan now.",
-                    SystemPrompt),
-                context,
-                Name,
-                2,
-                cancellationToken);
+            finalUserPrompt = $"{userPrompt}\n\nTool results:\n{string.Join("\n", toolResults)}\n\nReturn the final diagnostic plan now.";
+        }
+        else
+        {
+            initialText = completion.Text;
         }
 
-        try
-        {
-            var output = JsonSerializer.Deserialize<DiagnosticPlanOutput>(completion.Text, JsonOptions)
-                ?? throw new JsonException("The diagnostic planner returned an empty result.");
+        const int MaxRetries = 2;
+        string? lastError = null;
+        DiagnosticPlanOutput? output = null;
 
-            return new AgentResult<DiagnosticPlanOutput>(
-                output with
+        for (int attempt = 0; attempt <= MaxRetries; attempt++)
+        {
+            string textToParse;
+            
+            if (attempt == 0 && initialText is not null)
+            {
+                textToParse = initialText;
+            }
+            else
+            {
+                string promptForAttempt = finalUserPrompt;
+                if (lastError is not null)
                 {
-                    Steps = output.Steps ?? [],
-                    SafetyPrerequisites = output.SafetyPrerequisites ?? [],
-                    Reasoning = output.Reasoning ?? string.Empty
-                },
-                []);
-        }
-        catch (JsonException exception)
-        {
-            return Failure<DiagnosticPlanOutput>(
-                $"The diagnostic planner returned invalid structured output: {exception.Message}");
-        }
-    }
+                    promptForAttempt += $"\n\nYour previous response was invalid JSON and failed to parse with the following error:\n{lastError}\nPlease correct your response and return strictly valid JSON matching the schema. Do not include Markdown or commentary.";
+                }
 
+                var finalCompletion = await AgentEventRecorder.CompleteAsync(
+                    llmProvider,
+                    new CompletionRequest(promptForAttempt, SystemPrompt),
+                    context,
+                    Name,
+                    completion.ToolCalls is not null ? 2 : 1 + attempt,
+                    cancellationToken);
+                    
+                textToParse = finalCompletion.Text;
+            }
+
+            try
+            {
+                output = JsonSerializer.Deserialize<DiagnosticPlanOutput>(textToParse, JsonOptions)
+                    ?? throw new JsonException("The diagnostic planner returned an empty result.");
+                break;
+            }
+            catch (JsonException exception)
+            {
+                lastError = exception.Message;
+                if (attempt == MaxRetries)
+                {
+                    return Failure<DiagnosticPlanOutput>(
+                        $"The diagnostic planner returned invalid structured output after {MaxRetries + 1} attempts: {lastError}");
+                }
+            }
+        }
+
+        return new AgentResult<DiagnosticPlanOutput>(
+            output! with
+            {
+                Steps = output!.Steps ?? [],
+                SafetyPrerequisites = output.SafetyPrerequisites ?? [],
+                Reasoning = output.Reasoning ?? string.Empty
+            },
+            []);
+    }
     private ToolInvocationContext CreateInvocationContext(IAgentContext context) =>
         new(
             ParseGuid(context.UserId),

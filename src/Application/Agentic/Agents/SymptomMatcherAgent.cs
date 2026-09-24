@@ -28,7 +28,7 @@ public sealed class SymptomMatcherAgent(
 
     public string Name => "SymptomMatcher";
 
-    public async Task<AgentResult<SymptomMatchOutput>> ExecuteAsync(
+       public async Task<AgentResult<SymptomMatchOutput>> ExecuteAsync(
         SymptomMatchInput input,
         IAgentContext context,
         CancellationToken cancellationToken = default)
@@ -37,39 +37,37 @@ public sealed class SymptomMatcherAgent(
         ArgumentNullException.ThrowIfNull(context);
 
         var prompt = AgentPromptTemplates.SymptomMatcherPrompt;
-        var userPrompt = prompt.UserPromptTemplate
+        var baseUserPrompt = prompt.UserPromptTemplate
             .Replace("{SymptomDescription}", input.SymptomDescription, StringComparison.Ordinal)
             .Replace("{EquipmentId}", input.EquipmentIdHint ?? "unknown", StringComparison.Ordinal)
             .Replace("{Evidence}", "No evidence retrieved yet.", StringComparison.Ordinal);
 
+        var systemPromptWithTools = $"{prompt.SystemPrompt}\nYou may use the supplied SearchManuals and QueryFaultHistory tools when evidence is needed.";
+
         var completion = await AgentEventRecorder.CompleteAsync(
             llmProvider,
-            new CompletionRequest(
-                userPrompt,
-                $"{prompt.SystemPrompt}\nYou may use the supplied SearchManuals and QueryFaultHistory tools when evidence is needed.",
-                Tools: AllowedTools),
+            new CompletionRequest(baseUserPrompt, systemPromptWithTools, Tools: AllowedTools),
             context,
             Name,
             1,
             cancellationToken);
 
         var evidence = new List<EvidenceChunk>();
+        string finalUserPrompt = baseUserPrompt;
+        string? initialText = null;
+
         if (completion.ToolCalls is not null)
         {
             foreach (var toolCall in completion.ToolCalls)
             {
                 if (!AllowedTools.Any(tool => string.Equals(tool.Name, toolCall.Name, StringComparison.OrdinalIgnoreCase)))
                 {
-                    return Failure<SymptomMatchOutput>(
-                        $"Tool '{toolCall.Name}' is not allowed for agent '{Name}'.");
+                    return Failure<SymptomMatchOutput>($"Tool '{toolCall.Name}' is not allowed for agent '{Name}'.");
                 }
 
                 var dispatchResult = await AgentEventRecorder.DispatchAsync(
                     toolDispatcher,
-                    new ToolInvocationRequest(
-                        toolCall.Name,
-                        toolCall.ArgumentsJson,
-                        CreateInvocationContext(context)),
+                    new ToolInvocationRequest(toolCall.Name, toolCall.ArgumentsJson, CreateInvocationContext(context)),
                     context,
                     Name,
                     1,
@@ -78,8 +76,7 @@ public sealed class SymptomMatcherAgent(
 
                 if (!dispatchResult.Succeeded)
                 {
-                    return Failure<SymptomMatchOutput>(
-                        dispatchResult.ErrorMessage ?? $"Tool '{toolCall.Name}' failed.");
+                    return Failure<SymptomMatchOutput>(dispatchResult.ErrorMessage ?? $"Tool '{toolCall.Name}' failed.");
                 }
 
                 try
@@ -88,35 +85,66 @@ public sealed class SymptomMatcherAgent(
                 }
                 catch (JsonException exception)
                 {
-                    return Failure<SymptomMatchOutput>(
-                        $"Tool '{toolCall.Name}' returned invalid evidence: {exception.Message}");
+                    return Failure<SymptomMatchOutput>($"Tool '{toolCall.Name}' returned invalid evidence: {exception.Message}");
                 }
             }
 
-            completion = await AgentEventRecorder.CompleteAsync(
-                llmProvider,
-                new CompletionRequest(
-                    $"{userPrompt}\n\nRetrieved evidence:\n{JsonSerializer.Serialize(evidence, JsonOptions)}",
-                    prompt.SystemPrompt),
-                context,
-                Name,
-                2,
-                cancellationToken);
+            finalUserPrompt = $"{baseUserPrompt}\n\nRetrieved evidence:\n{JsonSerializer.Serialize(evidence, JsonOptions)}";
+        }
+        else
+        {
+            initialText = completion.Text;
         }
 
-        SymptomMatchOutput output;
-        try
+        const int MaxRetries = 2;
+        string? lastError = null;
+        SymptomMatchOutput? output = null;
+
+        for (int attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            output = JsonSerializer.Deserialize<SymptomMatchOutput>(completion.Text, JsonOptions)
-                ?? throw new JsonException("The symptom matcher returned an empty result.");
-        }
-        catch (JsonException exception)
-        {
-            return Failure<SymptomMatchOutput>(
-                $"The symptom matcher returned invalid structured output: {exception.Message}");
+            string textToParse;
+            
+            if (attempt == 0 && initialText is not null)
+            {
+                textToParse = initialText;
+            }
+            else
+            {
+                string promptForAttempt = finalUserPrompt;
+                if (lastError is not null)
+                {
+                    promptForAttempt += $"\n\nYour previous response was invalid JSON and failed to parse with the following error:\n{lastError}\nPlease correct your response and return strictly valid JSON matching the schema. Do not include Markdown or commentary.";
+                }
+
+                var finalCompletion = await AgentEventRecorder.CompleteAsync(
+                    llmProvider,
+                    new CompletionRequest(promptForAttempt, prompt.SystemPrompt),
+                    context,
+                    Name,
+                    completion.ToolCalls is not null ? 2 : 1 + attempt,
+                    cancellationToken);
+                    
+                textToParse = finalCompletion.Text;
+            }
+
+            try
+            {
+                output = JsonSerializer.Deserialize<SymptomMatchOutput>(textToParse, JsonOptions)
+                    ?? throw new JsonException("The symptom matcher returned an empty result.");
+                break;
+            }
+            catch (JsonException exception)
+            {
+                lastError = exception.Message;
+                if (attempt == MaxRetries)
+                {
+                    return Failure<SymptomMatchOutput>(
+                        $"The symptom matcher returned invalid structured output after {MaxRetries + 1} attempts: {lastError}");
+                }
+            }
         }
 
-        output = output with
+        output = output! with
         {
             EquipmentId = string.IsNullOrWhiteSpace(output.EquipmentId)
                 ? input.EquipmentIdHint ?? string.Empty
@@ -140,7 +168,6 @@ public sealed class SymptomMatcherAgent(
 
         return new AgentResult<SymptomMatchOutput>(output with { EvidenceChunks = evidence }, citations);
     }
-
     private ToolInvocationContext CreateInvocationContext(IAgentContext context) =>
         new(
             ParseGuid(context.UserId),
