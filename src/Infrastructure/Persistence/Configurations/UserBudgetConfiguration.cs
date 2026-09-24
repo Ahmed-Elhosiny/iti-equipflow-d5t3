@@ -15,7 +15,6 @@ public class UserBudgetConfiguration : IEntityTypeConfiguration<UserBudget>
 
         builder.Property(x => x.Id).ValueGeneratedNever();
 
-
         builder.HasIndex(x => x.UserId)
             .IsUnique();
 
@@ -30,6 +29,9 @@ public class UserBudgetConfiguration : IEntityTypeConfiguration<UserBudget>
                 money => money.Amount,
                 amount => Money.FromDecimal(amount))
             .HasPrecision(18, 4);
+
+        builder.Property(x => x.NextResetDate)
+            .IsRequired();
 
         builder.HasMany(x => x.Reservations)
             .WithOne()

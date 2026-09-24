@@ -10,6 +10,7 @@ public class UserBudget
     public Guid UserId { get; private set; }
     public Money TotalLimit { get; private set; }
     public Money ConsumedAmount { get; private set; }
+    public DateTimeOffset NextResetDate { get; private set; }
     public IReadOnlyCollection<BudgetReservation> Reservations => _reservations.AsReadOnly();
     public Money ReservedAmount => _reservations.Aggregate(
         Money.FromDecimal(0),
@@ -22,6 +23,7 @@ public class UserBudget
         UserId = userId;
         TotalLimit = totalLimit;
         ConsumedAmount = Money.FromDecimal(0);
+        NextResetDate = CalculateNextResetDate(DateTimeOffset.UtcNow);
     }
 
     public bool TryReserve(Guid reservationId, Money estimatedCost)
@@ -55,4 +57,21 @@ public class UserBudget
         if (reservation is not null)
             _reservations.Remove(reservation);
     }
+
+    public bool TryReset(DateTimeOffset currentDate)
+    {
+        if (currentDate < NextResetDate)
+            return false;
+
+        ConsumedAmount = Money.FromDecimal(0);
+        NextResetDate = CalculateNextResetDate(currentDate);
+        
+        // Clear any stale reservations that might have been left behind
+        _reservations.Clear();
+        
+        return true;
+    }
+
+    private static DateTimeOffset CalculateNextResetDate(DateTimeOffset currentDate) =>
+        new DateTimeOffset(currentDate.Year, currentDate.Month, 1, 0, 0, 0, TimeSpan.Zero).AddMonths(1);
 }

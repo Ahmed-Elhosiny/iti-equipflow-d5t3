@@ -13,7 +13,6 @@ public sealed class UserBudgetRepository(EquipFlowDbContext context) : IUserBudg
 
     public async Task<UserBudget?> GetByUserIdForUpdateAsync(Guid userId, CancellationToken ct)
     {
-        // Dynamically resolve table name to avoid hardcoding, then apply Postgres FOR UPDATE
         var tableName = context.Model.FindEntityType(typeof(UserBudget))?.GetTableName() ?? "UserBudgets";
         var sql = $"SELECT * FROM \"{tableName}\" WHERE \"UserId\" = {{0}} FOR UPDATE";
         
@@ -25,6 +24,12 @@ public sealed class UserBudgetRepository(EquipFlowDbContext context) : IUserBudg
 
     public async Task<IEnumerable<UserBudget>> GetAllAsync(CancellationToken ct) =>
         await context.UserBudgets
+            .Include(budget => budget.Reservations)
+            .ToListAsync(ct);
+
+    public async Task<IEnumerable<UserBudget>> GetBudgetsNeedingResetAsync(DateTimeOffset currentDate, CancellationToken ct) =>
+        await context.UserBudgets
+            .Where(budget => budget.NextResetDate <= currentDate)
             .Include(budget => budget.Reservations)
             .ToListAsync(ct);
 
