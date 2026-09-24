@@ -149,15 +149,28 @@ public sealed class CostGovernorServiceTests
         Assert.True(budget.AvailableAmount.Amount < 10m); // Budget reduced
     }
 
-    private static CostGovernorService CreateService(
+        private static CostGovernorService CreateService(
         FakeUserBudgetRepository repository,
         IModelRouter router,
         ICachePort? cache = null) =>
         new(
             repository,
+            new FakeTransactionManager(),
             NullLogger<CostGovernorService>.Instance,
             router,
             cache);
+
+    private sealed class FakeTransactionManager : ITransactionManager
+    {
+        public Task<IUnitOfWork> BeginTransactionAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IUnitOfWork>(new FakeUnitOfWork());
+
+        private sealed class FakeUnitOfWork : IUnitOfWork
+        {
+            public Task CommitAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        }
+    }
 
     private sealed class FakeModelRouter(ModelRoute? route) : IModelRouter
     {
@@ -183,6 +196,9 @@ public sealed class CostGovernorServiceTests
     private sealed class FakeUserBudgetRepository(UserBudget budget) : IUserBudgetRepository
     {
         public Task<UserBudget?> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken) =>
+            Task.FromResult<UserBudget?>(userId == budget.UserId ? budget : null);
+
+        public Task<UserBudget?> GetByUserIdForUpdateAsync(Guid userId, CancellationToken cancellationToken) =>
             Task.FromResult<UserBudget?>(userId == budget.UserId ? budget : null);
 
         public Task<IEnumerable<UserBudget>> GetAllAsync(CancellationToken cancellationToken) =>

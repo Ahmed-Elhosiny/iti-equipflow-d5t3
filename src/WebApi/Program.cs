@@ -135,6 +135,7 @@ builder.Services.AddScoped<IAgent<WorkOrderInput, WorkOrderOutput>>(serviceProvi
     serviceProvider.GetRequiredService<WorkOrderGeneratorAgent>());
 builder.Services.AddSingleton<EquipFlow.Application.Ports.ICachePort, EquipFlow.Infrastructure.Search.InMemorySemanticCacheAdapter>();
 builder.Services.AddScoped<EquipFlow.Application.Ports.IModelRouter, EquipFlow.Infrastructure.LLM.BudgetAwareModelRouter>();
+builder.Services.AddScoped<EquipFlow.Application.Ports.ITransactionManager, EquipFlow.Infrastructure.Persistence.EfTransactionManager>();
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
 builder.Services.AddScoped<SequentialSupervisorOrchestrator>();
 builder.Services.AddRagSearchInfrastructure();

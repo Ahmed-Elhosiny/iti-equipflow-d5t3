@@ -149,19 +149,32 @@ public sealed class CostGovernorWebApplicationFactory : WebApplicationFactory<Pr
             services.RemoveAll<DbContextOptions<EquipFlowDbContext>>();
             services.RemoveAll<DbContextOptions>();
             services.RemoveAll<IDbContextOptionsConfiguration<EquipFlowDbContext>>();
+            
+            services.AddDbContext<EquipFlowDbContext>(options =>
+                options.UseInMemoryDatabase("cost-governor-eval"));
+
             services.RemoveAll<IUserBudgetRepository>();
             services.AddSingleton<TestUserBudgetRepository>();
             services.AddSingleton<IUserBudgetRepository>(services =>
                 services.GetRequiredService<TestUserBudgetRepository>());
+
+            // ADD THIS: Bypass EF InMemory transaction limitations
+            services.RemoveAll<EquipFlow.Application.Ports.ITransactionManager>();
+            services.AddScoped<EquipFlow.Application.Ports.ITransactionManager, NoOpTransactionManager>();
         });
     }
 }
+
+
 
 public sealed class TestUserBudgetRepository : IUserBudgetRepository
 {
     private readonly ConcurrentDictionary<Guid, UserBudget> budgets = new();
 
     public Task<UserBudget?> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken) =>
+        Task.FromResult(budgets.GetValueOrDefault(userId));
+
+    public Task<UserBudget?> GetByUserIdForUpdateAsync(Guid userId, CancellationToken cancellationToken) =>
         Task.FromResult(budgets.GetValueOrDefault(userId));
 
     public Task<IEnumerable<UserBudget>> GetAllAsync(CancellationToken cancellationToken) =>
@@ -177,5 +190,17 @@ public sealed class TestUserBudgetRepository : IUserBudgetRepository
     {
         budgets[budget.UserId] = budget;
         return Task.CompletedTask;
+    }
+
+}
+public sealed class NoOpTransactionManager : EquipFlow.Application.Ports.ITransactionManager
+{
+    public Task<EquipFlow.Application.Ports.IUnitOfWork> BeginTransactionAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<EquipFlow.Application.Ports.IUnitOfWork>(new NoOpUnitOfWork());
+
+    private sealed class NoOpUnitOfWork : EquipFlow.Application.Ports.IUnitOfWork
+    {
+        public Task CommitAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }
