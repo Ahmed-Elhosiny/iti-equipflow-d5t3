@@ -10,6 +10,8 @@ public class DocumentChunk
     public DocumentMetadata Metadata { get; private set; }
     public int TokenCount { get; private set; }
     public ReadOnlyMemory<float> Embedding { get; private set; }
+    public string? EquipmentId { get; private set; }
+    public string? ProductionLine { get; private set; }
 
     // EF Core parameterless constructor
     private DocumentChunk()
@@ -19,9 +21,17 @@ public class DocumentChunk
         Content = string.Empty;
         Metadata = null!;
         Embedding = ReadOnlyMemory<float>.Empty;
+        EquipmentId = null;
+        ProductionLine = null;
     }
 
-    public DocumentChunk(Guid documentId, string content, DocumentMetadata metadata, int tokenCount)
+    public DocumentChunk(
+        Guid documentId, 
+        string content, 
+        DocumentMetadata metadata, 
+        int tokenCount,
+        string? equipmentId = null,
+        string? productionLine = null)
     {
         if (documentId == Guid.Empty)
             throw new ArgumentException("DocumentId cannot be empty.", nameof(documentId));
@@ -37,6 +47,8 @@ public class DocumentChunk
         Metadata = metadata;
         TokenCount = tokenCount;
         Embedding = ReadOnlyMemory<float>.Empty;
+        EquipmentId = equipmentId;
+        ProductionLine = productionLine;
     }
 
     public void SetEmbedding(ReadOnlyMemory<float> embedding)
