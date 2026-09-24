@@ -279,7 +279,7 @@ public static class AiEndpoints
         }
     }
 
-    private static AnalyzeMaintenanceResponse ToResponse(WorkflowResult result) =>
+       private static AnalyzeMaintenanceResponse ToResponse(WorkflowResult result) =>
         new(
             result.Status,
             result.Draft,
@@ -288,7 +288,9 @@ public static class AiEndpoints
             result.ReasonCode,
             result.EstimatedCost,
             result.RemainingBudget,
-            result.CachedResponse);
+            result.CachedResponse,
+            result.FallbackSearchResults?.Select(r => new CitationDto(r.DocumentId.ToString(), r.ChunkId.ToString(), null, null, (float)r.Score)));
+
 
     private sealed record AgentContext(string CorrelationId, string UserId) : IAgentContext;
 }
@@ -325,4 +327,5 @@ public record AnalyzeMaintenanceResponse(
     string? ReasonCode = null,
     decimal? EstimatedCost = null,
     decimal? RemainingBudget = null,
-    string? CachedResponse = null);
+    string? CachedResponse = null,
+    IEnumerable<CitationDto>? FallbackCitations = null);

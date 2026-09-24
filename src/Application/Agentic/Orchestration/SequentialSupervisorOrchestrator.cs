@@ -3,7 +3,9 @@ using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Agentic.Contracts;
 using EquipFlow.Application.Agentic.Events;
 using EquipFlow.Application.Ports;
+using EquipFlow.Application.Search.Queries;
 using EquipFlow.Domain.Budget.ValueObjects;
+using MediatR;
 using Microsoft.Extensions.Logging;
 
 namespace EquipFlow.Application.Agentic.Orchestration;
@@ -14,6 +16,7 @@ public sealed class SequentialSupervisorOrchestrator(
     IAgent<WorkOrderInput, WorkOrderOutput> workOrderGenerator,
     ICostGovernor costGovernor,
     IAgentEventStore agentEventStore,
+    ISender sender,
     ILogger<SequentialSupervisorOrchestrator> logger,
     ICachePort? cachePort = null)
 {
@@ -92,6 +95,13 @@ public sealed class SequentialSupervisorOrchestrator(
             if (symptomResult.Error is not null)
             {
                 await ReleaseReservationAsync(resolvedUserId, reservationId.Value);
+                var fallbackResult = await TryRagFallbackAsync(request.SymptomDescription, symptomResult.Error, workflowToken);
+                if (fallbackResult is not null)
+                {
+                    finalStatus = AgentRunStatus.PartialSuccess;
+                    outputSummary = "Degraded to RAG fallback due to agent failure.";
+                    return fallbackResult;
+                }
                 finalError = symptomResult.Error;
                 return WorkflowResult.Failed(symptomResult.Error);
             }
@@ -108,6 +118,13 @@ public sealed class SequentialSupervisorOrchestrator(
             if (diagnosticResult.Error is not null)
             {
                 await ReleaseReservationAsync(resolvedUserId, reservationId.Value);
+                var fallbackResult = await TryRagFallbackAsync(request.SymptomDescription, diagnosticResult.Error, workflowToken);
+                if (fallbackResult is not null)
+                {
+                    finalStatus = AgentRunStatus.PartialSuccess;
+                    outputSummary = "Degraded to RAG fallback due to agent failure.";
+                    return fallbackResult;
+                }
                 finalError = diagnosticResult.Error;
                 return WorkflowResult.Failed(diagnosticResult.Error);
             }
@@ -210,6 +227,26 @@ public sealed class SequentialSupervisorOrchestrator(
         }
     }
 
+    private async Task<WorkflowResult?> TryRagFallbackAsync(string symptomDescription, string originalError, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var searchResult = await sender.Send(new SearchDocumentsQuery(symptomDescription, TopK: 5), cancellationToken);
+            if (searchResult.IsRefusal || searchResult.Results.Count == 0)
+            {
+                logger.LogWarning("RAG fallback failed or found no relevant documents: {Reason}", searchResult.RefusalReason);
+                return null;
+            }
+
+            return WorkflowResult.Fallback(searchResult.Results, originalError);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "RAG fallback threw an exception.");
+            return null;
+        }
+    }
+
     private async Task<AgentResult<TOutput>> ExecuteStepAsync<TInput, TOutput>(
         IAgent<TInput, TOutput> agent,
         TInput input,
@@ -298,7 +335,8 @@ public record WorkflowResult(
     decimal? EstimatedCost = null,
     decimal? RemainingBudget = null,
     string? CachedResponse = null,
-    DiagnosticPlanOutput? DiagnosticPlan = null)
+    DiagnosticPlanOutput? DiagnosticPlan = null,
+    IReadOnlyList<EquipFlow.Domain.Search.SearchResult>? FallbackSearchResults = null)
 {
     public static WorkflowResult PendingApproval(WorkOrderOutput draft) =>
         new(WorkflowStatus.PendingApproval, draft, null);
@@ -320,6 +358,9 @@ public record WorkflowResult(
 
     public static WorkflowResult PartialSuccess(DiagnosticPlanOutput diagnosticPlan, string message) =>
         new(WorkflowStatus.PartialSuccess, null, message, DiagnosticPlan: diagnosticPlan);
+
+    public static WorkflowResult Fallback(IReadOnlyList<EquipFlow.Domain.Search.SearchResult> results, string originalError) =>
+        new(WorkflowStatus.Fallback, null, originalError, "agent_failure_fallback_rag", FallbackSearchResults: results);
 }
 
 public enum WorkflowStatus
@@ -328,5 +369,6 @@ public enum WorkflowStatus
     Blocked,
     Failed,
     Cached,
-    PartialSuccess
+    PartialSuccess,
+    Fallback
 }
