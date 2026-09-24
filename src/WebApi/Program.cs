@@ -137,6 +137,7 @@ builder.Services.AddSingleton<EquipFlow.Application.Ports.ICachePort, EquipFlow.
 builder.Services.AddScoped<EquipFlow.Application.Ports.IModelRouter, EquipFlow.Infrastructure.LLM.BudgetAwareModelRouter>();
 builder.Services.AddScoped<EquipFlow.Application.Ports.ITransactionManager, EquipFlow.Infrastructure.Persistence.EfTransactionManager>();
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
+builder.Services.AddHostedService<EquipFlow.Infrastructure.BackgroundServices.BudgetResetBackgroundService>();
 builder.Services.AddScoped<SequentialSupervisorOrchestrator>();
 builder.Services.AddRagSearchInfrastructure();
 

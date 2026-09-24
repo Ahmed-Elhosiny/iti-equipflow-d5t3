@@ -264,6 +264,8 @@ public sealed class InMemoryUserBudgetRepository : IUserBudgetRepository
         budgets[budget.UserId] = budget;
         return Task.CompletedTask;
     }
+    public Task<IEnumerable<UserBudget>> GetBudgetsNeedingResetAsync(DateTimeOffset currentDate, CancellationToken ct) =>
+        Task.FromResult<IEnumerable<UserBudget>>(Array.Empty<UserBudget>());
 }
 
 public sealed class TestAuthHandler(

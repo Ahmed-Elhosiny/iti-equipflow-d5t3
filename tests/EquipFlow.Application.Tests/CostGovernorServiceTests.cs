@@ -209,5 +209,7 @@ public sealed class CostGovernorServiceTests
 
         public Task UpdateAsync(UserBudget updatedBudget, CancellationToken cancellationToken) =>
             Task.CompletedTask;
+        public Task<IEnumerable<UserBudget>> GetBudgetsNeedingResetAsync(DateTimeOffset currentDate, CancellationToken ct) =>
+        Task.FromResult<IEnumerable<UserBudget>>(Array.Empty<UserBudget>());
     }
 }
