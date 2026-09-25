@@ -15,6 +15,8 @@ public sealed class DiagnosticSafetyPlannerAgent(
     IOptions<AgenticOptions> options) : IAgent<DiagnosticPlanInput, DiagnosticPlanOutput>
 {
     private readonly int _maxIterations = options.Value.MaxIterations;
+    private readonly int _maxRetries = options.Value.MaxRetries;
+
 
     private static readonly IReadOnlyList<ToolDefinition> AllowedTools =
     [
@@ -127,11 +129,10 @@ public sealed class DiagnosticSafetyPlannerAgent(
         }
 
         // --- JSON SCHEMA RETRY LOOP ---
-        const int MaxRetries = 2;
         string? lastError = null;
         DiagnosticPlanOutput? output = null;
 
-        for (int attempt = 0; attempt <= MaxRetries; attempt++)
+        for (int attempt = 0; attempt <= _maxRetries; attempt++)
         {
             string textToParse;
             
@@ -163,10 +164,10 @@ public sealed class DiagnosticSafetyPlannerAgent(
             catch (JsonException exception)
             {
                 lastError = exception.Message;
-                if (attempt == MaxRetries)
+                if (attempt == _maxRetries)
                 {
                     return Failure<DiagnosticPlanOutput>(
-                        $"The diagnostic planner returned invalid structured output after {MaxRetries + 1} attempts: {lastError}");
+                        $"The diagnostic planner returned invalid structured output after {_maxRetries + 1} attempts: {lastError}");
                 }
             }
         }
