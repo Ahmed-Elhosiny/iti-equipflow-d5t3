@@ -2,16 +2,21 @@ using System.Text.Json;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Agentic.Contracts;
 using EquipFlow.Application.Agentic.Events;
+using EquipFlow.Application.Options;
 using EquipFlow.Application.Prompts;
 using EquipFlow.Application.Tools.Definitions;
 using EquipFlow.Application.Tools.Ports;
+using Microsoft.Extensions.Options;
 
 namespace EquipFlow.Application.Agentic.Agents;
 
 public sealed class SymptomMatcherAgent(
     ILLMProvider llmProvider,
-    IToolDispatcher toolDispatcher) : IAgent<SymptomMatchInput, SymptomMatchOutput>
+    IToolDispatcher toolDispatcher,
+    IOptions<AgenticOptions> options) : IAgent<SymptomMatchInput, SymptomMatchOutput>
 {
+    private readonly int _maxIterations = options.Value.MaxIterations;
+
     private static readonly IReadOnlyList<ToolDefinition> AllowedTools =
     [
         new(
@@ -28,7 +33,7 @@ public sealed class SymptomMatcherAgent(
 
     public string Name => "SymptomMatcher";
 
-        public async Task<AgentResult<SymptomMatchOutput>> ExecuteAsync(
+    public async Task<AgentResult<SymptomMatchOutput>> ExecuteAsync(
         SymptomMatchInput input,
         IAgentContext context,
         CancellationToken cancellationToken = default)
@@ -44,14 +49,13 @@ public sealed class SymptomMatcherAgent(
 
         var evidence = new List<EvidenceChunk>();
         
-        const int MaxIterations = 5;
         int iteration = 0;
         string currentPrompt = baseUserPrompt;
         string currentSystemPrompt = $"{prompt.SystemPrompt}\nYou may use the supplied SearchManuals and QueryFaultHistory tools when evidence is needed.";
         string? finalText = null;
 
         // --- BOUNDED ITERATION LOOP (FR-024 / AG-008) ---
-        while (iteration < MaxIterations)
+        while (iteration < _maxIterations)
         {
             iteration++;
             var completion = await AgentEventRecorder.CompleteAsync(
@@ -107,7 +111,7 @@ public sealed class SymptomMatcherAgent(
         if (finalText is null)
         {
             // Iteration Breaker Triggered
-            return Failure<SymptomMatchOutput>($"Agent '{Name}' exceeded maximum tool-calling iterations ({MaxIterations}) without producing a final output.");
+            return Failure<SymptomMatchOutput>($"Agent '{Name}' exceeded maximum tool-calling iterations ({_maxIterations}) without producing a final output.");
         }
 
         // --- JSON SCHEMA RETRY LOOP ---
@@ -179,6 +183,7 @@ public sealed class SymptomMatcherAgent(
 
         return new AgentResult<SymptomMatchOutput>(output with { EvidenceChunks = evidence }, citations);
     }
+
     private ToolInvocationContext CreateInvocationContext(IAgentContext context) =>
         new(
             ParseGuid(context.UserId),

@@ -2,15 +2,20 @@ using System.Text.Json;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Agentic.Contracts;
 using EquipFlow.Application.Agentic.Events;
+using EquipFlow.Application.Options;
 using EquipFlow.Application.Tools.Definitions;
 using EquipFlow.Application.Tools.Ports;
+using Microsoft.Extensions.Options;
 
 namespace EquipFlow.Application.Agentic.Agents;
 
 public sealed class WorkOrderGeneratorAgent(
     ILLMProvider llmProvider,
-    IToolDispatcher toolDispatcher) : IAgent<WorkOrderInput, WorkOrderOutput>
+    IToolDispatcher toolDispatcher,
+    IOptions<AgenticOptions> options) : IAgent<WorkOrderInput, WorkOrderOutput>
 {
+    private readonly int _maxIterations = options.Value.MaxIterations;
+
     private static readonly IReadOnlyList<ToolDefinition> AllowedTools =
     [
         new(
@@ -46,7 +51,7 @@ public sealed class WorkOrderGeneratorAgent(
 
     public string Name => "WorkOrderGenerator";
 
-      public async Task<AgentResult<WorkOrderOutput>> ExecuteAsync(
+    public async Task<AgentResult<WorkOrderOutput>> ExecuteAsync(
         WorkOrderInput input,
         IAgentContext context,
         CancellationToken cancellationToken = default)
@@ -64,7 +69,6 @@ public sealed class WorkOrderGeneratorAgent(
             required parts, priority, and estimated cost. Request ValidateBudget before DraftWorkOrder.
             """;
 
-        const int MaxIterations = 5;
         int iteration = 0;
         string currentPrompt = baseUserPrompt;
         string currentSystemPrompt = SystemPrompt;
@@ -74,7 +78,7 @@ public sealed class WorkOrderGeneratorAgent(
         ToolCall? draftCall = null;
 
         // --- BOUNDED ITERATION LOOP (FR-024 / AG-008) ---
-        while (iteration < MaxIterations)
+        while (iteration < _maxIterations)
         {
             iteration++;
             var completion = await AgentEventRecorder.CompleteAsync(
@@ -126,7 +130,7 @@ public sealed class WorkOrderGeneratorAgent(
         if (finalText is null)
         {
             // Iteration Breaker Triggered
-            return Failure<WorkOrderOutput>($"Agent '{Name}' exceeded maximum tool-calling iterations ({MaxIterations}) without producing a final output.");
+            return Failure<WorkOrderOutput>($"Agent '{Name}' exceeded maximum tool-calling iterations ({_maxIterations}) without producing a final output.");
         }
         
         if (approvedBudget is null)
@@ -193,6 +197,7 @@ public sealed class WorkOrderGeneratorAgent(
             },
             []);
     }
+
     private async Task<ToolDispatchResult> DispatchAsync(
         ToolCall toolCall,
         IAgentContext context,
