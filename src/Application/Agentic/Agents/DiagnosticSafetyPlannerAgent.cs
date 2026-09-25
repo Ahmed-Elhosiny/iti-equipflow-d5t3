@@ -2,15 +2,20 @@ using System.Text.Json;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Agentic.Contracts;
 using EquipFlow.Application.Agentic.Events;
+using EquipFlow.Application.Options;
 using EquipFlow.Application.Tools.Definitions;
 using EquipFlow.Application.Tools.Ports;
+using Microsoft.Extensions.Options;
 
 namespace EquipFlow.Application.Agentic.Agents;
 
 public sealed class DiagnosticSafetyPlannerAgent(
     ILLMProvider llmProvider,
-    IToolDispatcher toolDispatcher) : IAgent<DiagnosticPlanInput, DiagnosticPlanOutput>
+    IToolDispatcher toolDispatcher,
+    IOptions<AgenticOptions> options) : IAgent<DiagnosticPlanInput, DiagnosticPlanOutput>
 {
+    private readonly int _maxIterations = options.Value.MaxIterations;
+
     private static readonly IReadOnlyList<ToolDefinition> AllowedTools =
     [
         new(
@@ -42,7 +47,7 @@ public sealed class DiagnosticSafetyPlannerAgent(
 
     public string Name => "DiagnosticSafetyPlanner";
 
-        public async Task<AgentResult<DiagnosticPlanOutput>> ExecuteAsync(
+    public async Task<AgentResult<DiagnosticPlanOutput>> ExecuteAsync(
         DiagnosticPlanInput input,
         IAgentContext context,
         CancellationToken cancellationToken = default)
@@ -65,14 +70,13 @@ public sealed class DiagnosticSafetyPlannerAgent(
             No tool results have been retrieved yet.
             """;
 
-        const int MaxIterations = 5;
         int iteration = 0;
         string currentPrompt = baseUserPrompt;
         string currentSystemPrompt = SystemPrompt + "\nYou may use only the supplied GetEquipmentSpecs and GenerateSafetyChecklist tools.";
         string? finalText = null;
 
         // --- BOUNDED ITERATION LOOP (FR-024 / AG-008) ---
-        while (iteration < MaxIterations)
+        while (iteration < _maxIterations)
         {
             iteration++;
             var completion = await AgentEventRecorder.CompleteAsync(
@@ -119,7 +123,7 @@ public sealed class DiagnosticSafetyPlannerAgent(
         if (finalText is null)
         {
             // Iteration Breaker Triggered
-            return Failure<DiagnosticPlanOutput>($"Agent '{Name}' exceeded maximum tool-calling iterations ({MaxIterations}) without producing a final output.");
+            return Failure<DiagnosticPlanOutput>($"Agent '{Name}' exceeded maximum tool-calling iterations ({_maxIterations}) without producing a final output.");
         }
 
         // --- JSON SCHEMA RETRY LOOP ---
@@ -176,7 +180,8 @@ public sealed class DiagnosticSafetyPlannerAgent(
             },
             []);
     }
-     private ToolInvocationContext CreateInvocationContext(IAgentContext context) =>
+
+    private ToolInvocationContext CreateInvocationContext(IAgentContext context) =>
         new(
             ParseGuid(context.UserId),
             "Technician",
