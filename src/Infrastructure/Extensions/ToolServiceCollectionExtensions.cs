@@ -1,6 +1,6 @@
 using EquipFlow.Application.Tools.Ports;
-using EquipFlow.Infrastructure.Tools.Dispatcher;
 using EquipFlow.Infrastructure.Tools;
+using EquipFlow.Infrastructure.Tools.Dispatcher;
 using EquipFlow.Infrastructure.Tools.Executors;
 using EquipFlow.Infrastructure.Tools.Registry;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,9 +14,7 @@ namespace EquipFlow.Infrastructure.Extensions;
 public static class ToolServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers the read-only tool executors and dispatcher used by the EquipFlow agent tool system.
-    /// This wires the dispatcher to the available read-only executor implementations without registering
-    /// any write or control tools yet.
+    /// Registers the tool executors and dispatcher used by the EquipFlow agent tool system.
     /// </summary>
     /// <remarks>Dispatcher execution chain: Core -> Validation (TL-006) -> Authorization (TL-007/AG-003).</remarks>
     /// <param name="services">The service collection to configure.</param>
@@ -25,6 +23,7 @@ public static class ToolServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // Dispatchers
         services.AddScoped<ToolDispatcher>();
         services.AddScoped<ValidatingToolDispatcher>(sp =>
         {
@@ -39,8 +38,18 @@ public static class ToolServiceCollectionExtensions
             var logger = sp.GetRequiredService<ILogger<AuthorizingToolDispatcher>>();
             return new AuthorizingToolDispatcher(innerDispatcher, agentToolRegistry, logger);
         });
+        
+        // Registry
         services.AddSingleton<IAgentToolRegistry, StaticAgentToolRegistry>();
-        services.AddScoped<IToolExecutor, SearchManualsToolExecutor>();
+
+        // Tool Executors
+        
+        // Register SearchManualsToolExecutor once and map both interfaces to the same scoped instance.
+        // This prevents duplicate DI registrations and ensures the real hybrid retrieval is used (FR-4).
+        services.AddScoped<SearchManualsToolExecutor>();
+        services.AddScoped<IToolExecutor>(sp => sp.GetRequiredService<SearchManualsToolExecutor>());
+        services.AddScoped<ISearchManualsTool>(sp => sp.GetRequiredService<SearchManualsToolExecutor>());
+
         services.AddScoped<IToolExecutor, QueryFaultHistoryExecutor>();
         services.AddScoped<IToolExecutor, GetEquipmentSpecsExecutor>();
         services.AddScoped<IToolExecutor, GenerateSafetyChecklistExecutor>();
