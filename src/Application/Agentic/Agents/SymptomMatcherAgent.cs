@@ -16,6 +16,8 @@ public sealed class SymptomMatcherAgent(
     IOptions<AgenticOptions> options) : IAgent<SymptomMatchInput, SymptomMatchOutput>
 {
     private readonly int _maxIterations = options.Value.MaxIterations;
+    private readonly int _maxRetries = options.Value.MaxRetries;
+
 
     private static readonly IReadOnlyList<ToolDefinition> AllowedTools =
     [
@@ -115,11 +117,10 @@ public sealed class SymptomMatcherAgent(
         }
 
         // --- JSON SCHEMA RETRY LOOP ---
-        const int MaxRetries = 2;
         string? lastError = null;
         SymptomMatchOutput? output = null;
 
-        for (int attempt = 0; attempt <= MaxRetries; attempt++)
+        for (int attempt = 0; attempt <= _maxRetries; attempt++)
         {
             string textToParse;
             
@@ -151,14 +152,13 @@ public sealed class SymptomMatcherAgent(
             catch (JsonException exception)
             {
                 lastError = exception.Message;
-                if (attempt == MaxRetries)
+                if (attempt == _maxRetries)
                 {
                     return Failure<SymptomMatchOutput>(
-                        $"The symptom matcher returned invalid structured output after {MaxRetries + 1} attempts: {lastError}");
+                        $"The symptom matcher returned invalid structured output after {_maxRetries + 1} attempts: {lastError}");
                 }
             }
         }
-
         output = output! with
         {
             EquipmentId = string.IsNullOrWhiteSpace(output.EquipmentId)

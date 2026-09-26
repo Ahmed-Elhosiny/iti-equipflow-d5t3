@@ -15,6 +15,7 @@ public sealed class WorkOrderGeneratorAgent(
     IOptions<AgenticOptions> options) : IAgent<WorkOrderInput, WorkOrderOutput>
 {
     private readonly int _maxIterations = options.Value.MaxIterations;
+    private readonly int _maxRetries = options.Value.MaxRetries;
 
     private static readonly IReadOnlyList<ToolDefinition> AllowedTools =
     [
@@ -139,11 +140,10 @@ public sealed class WorkOrderGeneratorAgent(
         }
 
         // --- JSON SCHEMA RETRY LOOP ---
-        const int MaxRetries = 2;
         string? lastError = null;
         WorkOrderOutput? output = null;
 
-        for (int attempt = 0; attempt <= MaxRetries; attempt++)
+        for (int attempt = 0; attempt <= _maxRetries; attempt++)
         {
             string textToParse;
             
@@ -175,10 +175,10 @@ public sealed class WorkOrderGeneratorAgent(
             catch (JsonException exception)
             {
                 lastError = exception.Message;
-                if (attempt == MaxRetries)
+                if (attempt == _maxRetries)
                 {
                     return Failure<WorkOrderOutput>(
-                        $"The work order generator returned invalid structured output after {MaxRetries + 1} attempts: {lastError}");
+                        $"The work order generator returned invalid structured output after {_maxRetries + 1} attempts: {lastError}");
                 }
             }
         }
