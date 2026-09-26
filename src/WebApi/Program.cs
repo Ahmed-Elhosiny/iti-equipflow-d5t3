@@ -120,11 +120,11 @@ builder.Services.AddScoped<ITextChunker, SimpleTextChunker>();
 var openAiApiKey = builder.Configuration["Llm:OpenAI:ApiKey"];
 if (string.IsNullOrWhiteSpace(openAiApiKey))
 {
-    builder.Services.AddScoped<IEmbeddingPort, MockEmbeddingAdapter>();
+    builder.Services.AddSingleton<IEmbeddingPort, MockEmbeddingAdapter>();
 }
 else
 {
-    builder.Services.AddScoped<IEmbeddingPort, OpenAiEmbeddingAdapter>();
+    builder.Services.AddSingleton<IEmbeddingPort, OpenAiEmbeddingAdapter>();
 }builder.Services.AddScoped<PdfDocumentExtractor>();
 builder.Services.AddScoped<DocxDocumentExtractor>();
 builder.Services.AddScoped<IDocumentExtractor>(serviceProvider =>
