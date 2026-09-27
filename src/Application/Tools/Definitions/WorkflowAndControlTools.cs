@@ -14,7 +14,7 @@ public sealed record DraftWorkOrderRequest(
 /// <summary>
 /// Response from drafting a work order.
 /// </summary>
-public sealed record DraftWorkOrderResponse(bool Success, string Status);
+public sealed record DraftWorkOrderResponse(bool Success, string Status, Guid? WorkOrderId = null);
 
 /// <summary>
 /// Request for validating an estimated work order cost with the Cost Governor.
