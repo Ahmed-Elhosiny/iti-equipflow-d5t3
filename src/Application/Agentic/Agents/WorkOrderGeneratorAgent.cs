@@ -77,6 +77,7 @@ public sealed class WorkOrderGeneratorAgent(
         
         ToolDispatchResult? approvedBudget = null;
         ToolCall? draftCall = null;
+        Guid? draftedWorkOrderId = null;
 
         // --- BOUNDED ITERATION LOOP (FR-024 / AG-008) ---
         while (iteration < _maxIterations)
@@ -120,6 +121,7 @@ public sealed class WorkOrderGeneratorAgent(
                 else if (string.Equals(toolCall.Name, "DraftWorkOrder", StringComparison.OrdinalIgnoreCase))
                 {
                     draftCall = toolCall;
+                    draftedWorkOrderId = ReadWorkOrderId(dispatchResult.ResultJson);
                 }
 
                 currentPrompt += $"\n\nTool '{toolCall.Name}' result:\n{dispatchResult.ResultJson}";
@@ -186,7 +188,7 @@ public sealed class WorkOrderGeneratorAgent(
         return new AgentResult<WorkOrderOutput>(
             output! with
             {
-                WorkOrderId = null, 
+                WorkOrderId = draftedWorkOrderId, 
                 Summary = string.IsNullOrWhiteSpace(output!.Summary)
                     ? output.Description
                     : output.Summary,
@@ -253,7 +255,21 @@ public sealed class WorkOrderGeneratorAgent(
             ? cost.GetDecimal()
             : 0;
     }
-
+        private static Guid? ReadWorkOrderId(string? resultJson)
+    {
+        if (string.IsNullOrWhiteSpace(resultJson)) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(resultJson);
+            return document.RootElement.TryGetProperty("workOrderId", out var idProp) && idProp.ValueKind == JsonValueKind.String
+                ? Guid.TryParse(idProp.GetString(), out var id) ? id : null
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
     private static Guid ParseGuid(string value) =>
         Guid.TryParse(value, out var parsed) ? parsed : Guid.Empty;
 
