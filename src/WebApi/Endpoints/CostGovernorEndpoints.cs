@@ -25,11 +25,19 @@ public static class CostGovernorEndpoints
             .WithDescription("Returns the budget and recent spend for the authenticated user.")
             .RequireAuthorization();
 
-        endpoints.MapGet("/api/budgets", GetAllBudgets)
+               endpoints.MapGet("/api/budgets", GetAllBudgets)
             .WithName("GetAllBudgets")
             .WithSummary("Get all user budgets")
             .WithDescription("Returns all user budgets. This operation is restricted to managers.")
             .RequireAuthorization(policy => policy.RequireRole("Manager"));
+
+        endpoints.MapGet("/api/cost/spend", GetMySpend)
+            .WithName("GetMySpend")
+            .WithSummary("Get the authenticated user's spend history")
+            .WithDescription("Returns the run spend history for the authenticated user (CG-008).")
+            .RequireAuthorization();
+
+        return endpoints;
 
         return endpoints;
     }
@@ -70,5 +78,22 @@ public static class CostGovernorEndpoints
     {
         var budgets = await sender.Send(new GetAllBudgetsQuery(), cancellationToken);
         return TypedResults.Ok(budgets);
+    }
+        /// <summary>
+    /// Gets the spend history for the authenticated user.
+    /// </summary>
+    private static async Task<IResult> GetMySpend(
+        HttpContext httpContext,
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        var userId = httpContext.User.GetUserId();
+        if (!userId.HasValue)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var spendHistory = await sender.Send(new GetMySpendQuery(userId.Value), cancellationToken);
+        return TypedResults.Ok(spendHistory);
     }
 }
