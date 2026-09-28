@@ -25,6 +25,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using EquipFlow.Application.Options;
+using EquipFlow.Application.Conversations.Ports;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -113,6 +114,7 @@ builder.Services.AddScoped<DatabaseSeeder>();
 builder.Services.AddScoped<IAgentEventStore, AgentEventStore>();
 builder.Services.AddScoped<IUserBudgetRepository, UserBudgetRepository>();
 builder.Services.AddScoped<IWorkOrderRepository, WorkOrderRepository>();
+builder.Services.AddScoped<IConversationRepository, ConversationRepository>();
 builder.Services.AddScoped<IEquipmentRepository, EquipmentRepository>();
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddScoped<IDocumentChunkRepository, DocumentChunkRepository>();
