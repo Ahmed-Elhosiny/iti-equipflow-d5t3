@@ -1,16 +1,17 @@
+using EquipFlow.Application.Options;
 using EquipFlow.Application.Ports;
 using EquipFlow.Application.Search.Models;
 using EquipFlow.Application.Search.Ports;
 using EquipFlow.Application.Search.Services;
 using EquipFlow.Domain.Search;
 using MediatR;
+using Microsoft.Extensions.Options;
 
 namespace EquipFlow.Application.Search.Queries;
 
 public sealed class SearchDocumentsQueryHandler
     : IRequestHandler<SearchDocumentsQuery, SearchDocumentsQueryResult>
 {
-    private const double RelevanceThreshold = 0.0;
     private const string RefusalReason =
         "No sufficiently relevant documents found for the given query.";
 
@@ -19,12 +20,14 @@ public sealed class SearchDocumentsQueryHandler
     private readonly IKeywordSearchPort _keywordSearchPort;
     private readonly ReciprocalRankFusionService _fusionService;
     private readonly IRerankerPort? _rerankerPort;
+    private readonly double _relevanceThreshold;
 
     public SearchDocumentsQueryHandler(
         IEmbeddingPort embeddingPort,
         IVectorSearchPort vectorSearchPort,
         IKeywordSearchPort keywordSearchPort,
         ReciprocalRankFusionService fusionService,
+        IOptions<AgenticOptions> options,
         IRerankerPort? rerankerPort = null)
     {
         _embeddingPort = embeddingPort;
@@ -32,6 +35,7 @@ public sealed class SearchDocumentsQueryHandler
         _keywordSearchPort = keywordSearchPort;
         _fusionService = fusionService;
         _rerankerPort = rerankerPort;
+        _relevanceThreshold = options.Value.MinRelevanceScore;
     }
 
     public async Task<SearchDocumentsQueryResult> Handle(
@@ -69,7 +73,7 @@ public sealed class SearchDocumentsQueryHandler
         }
 
         var relevantCandidates = candidates
-            .Where(candidate => candidate.Score >= RelevanceThreshold)
+            .Where(candidate => candidate.Score >= _relevanceThreshold)
             .Take(request.TopK)
             .ToList();
 
