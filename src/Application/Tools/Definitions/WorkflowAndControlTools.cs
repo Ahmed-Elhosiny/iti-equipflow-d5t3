@@ -17,6 +17,22 @@ public sealed record DraftWorkOrderRequest(
 public sealed record DraftWorkOrderResponse(bool Success, string Status, Guid? WorkOrderId = null);
 
 /// <summary>
+/// Request for creating and persisting a work order (Gated Write Tool - TL-007).
+/// </summary>
+public sealed record CreateWorkOrderRequest(
+    Guid EquipmentId,
+    string Title,
+    string Description,
+    decimal EstimatedCost,
+    IReadOnlyList<string> RequiredParts,
+    IReadOnlyList<string> SafetyPrerequisites);
+
+/// <summary>
+/// Response from creating a work order.
+/// </summary>
+public sealed record CreateWorkOrderResponse(bool Success, string Status, Guid? WorkOrderId = null);
+
+/// <summary>
 /// Request for validating an estimated work order cost with the Cost Governor.
 /// </summary>
 public sealed record ValidateBudgetRequest(
@@ -70,6 +86,52 @@ public static class WorkflowToolSchemas
         {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "title": "DraftWorkOrderRequest",
+          "type": "object",
+          "properties": {
+            "equipmentId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "title": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "estimatedCost": {
+              "type": "number"
+            },
+            "requiredParts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "safetyPrerequisites": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "equipmentId",
+            "title",
+            "description",
+            "estimatedCost",
+            "requiredParts",
+            "safetyPrerequisites"
+          ]
+        }
+        """;
+
+    /// <summary>
+    /// JSON schema for <see cref="CreateWorkOrderRequest"/>.
+    /// </summary>
+    public const string CreateWorkOrderSchema = """
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "title": "CreateWorkOrderRequest",
           "type": "object",
           "properties": {
             "equipmentId": {

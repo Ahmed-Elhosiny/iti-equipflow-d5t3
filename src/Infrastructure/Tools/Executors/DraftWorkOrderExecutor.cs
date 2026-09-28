@@ -2,17 +2,15 @@ using System.Text.Json;
 using EquipFlow.Application.Ports;
 using EquipFlow.Application.Tools.Definitions;
 using EquipFlow.Application.Tools.Ports;
-using EquipFlow.Application.WorkOrders.Commands;
-using MediatR;
 using Microsoft.Extensions.Logging;
 
 namespace EquipFlow.Infrastructure.Tools.Executors;
 
 /// <summary>
-/// Executes the <c>DraftWorkOrder</c> tool by persisting the work order and its safety prerequisites.
+/// Executes the <c>DraftWorkOrder</c> tool by composing the work order details in-memory.
+/// This tool is read-only and does NOT persist the work order to the database (compose-only).
 /// </summary>
 public sealed class DraftWorkOrderExecutor(
-    ISender sender,
     IEquipmentRepository equipmentRepository,
     ILogger<DraftWorkOrderExecutor> logger) : IToolExecutor
 {
@@ -40,42 +38,18 @@ public sealed class DraftWorkOrderExecutor(
                     "DraftWorkOrder_FAILED", "The DraftWorkOrder arguments could not be deserialized.");
             }
 
-            // 1. Resolve Equipment details for the Work Order
+            // 1. Resolve Equipment details to ensure the equipment exists
             var equipment = await equipmentRepository.GetByIdAsync(draftRequest.EquipmentId, cancellationToken);
-            var equipmentName = equipment?.Name ?? "Unknown Equipment";
-            var assetNumber = equipment?.SerialNumber;
-
-            // Extract the user ID from the tool invocation context (Technician who initiated the run)
-            var createdBy = request.Context.UserId.ToString();
-
-            // 2. Persist the Work Order via Application Command
-            var createCommand = new CreateWorkOrderCommand(
-                Title: draftRequest.Title,
-                Symptom: draftRequest.Description,
-                EquipmentName: equipmentName,
-                CreatedBy: createdBy,
-                EquipmentAssetNumber: assetNumber,
-                ManualRevision: null,
-                Location: null);
-
-            var workOrderId = (Guid)await sender.Send(createCommand, cancellationToken);    
-            
-            // 3. Persist Safety Prerequisites via Application Command
-            if (draftRequest.SafetyPrerequisites is not null)
+            if (equipment is null)
             {
-                for (int i = 0; i < draftRequest.SafetyPrerequisites.Count; i++)
-                {
-                    var safetyCommand = new AddSafetyPrerequisiteCommand(
-                        WorkOrderId: workOrderId,
-                        Description: draftRequest.SafetyPrerequisites[i],
-                        IsMandatory: true, // Safety prerequisites from the agent are mandatory
-                        SortOrder: i);
-                    
-                    await sender.Send(safetyCommand, cancellationToken);
-                }
+                 return new ToolDispatchResult(
+                    request.ToolName, false, ToolDispatchStatus.ExecutorFailed, null, 
+                    "DraftWorkOrder_FAILED", $"Equipment '{draftRequest.EquipmentId}' not found.");
             }
 
-            var response = new DraftWorkOrderResponse(true, "Drafted", workOrderId);
+            // 2. Compose the response without persisting to the database
+            var response = new DraftWorkOrderResponse(true, "Composed", null);
+            
             return new ToolDispatchResult(
                 request.ToolName,
                 true,
