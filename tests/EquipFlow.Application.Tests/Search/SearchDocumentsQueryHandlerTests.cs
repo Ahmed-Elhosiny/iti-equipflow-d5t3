@@ -1,9 +1,11 @@
+using EquipFlow.Application.Options;
 using EquipFlow.Application.Ports;
 using EquipFlow.Application.Search.Models;
 using EquipFlow.Application.Search.Ports;
 using EquipFlow.Application.Search.Queries;
 using EquipFlow.Application.Search.Services;
 using EquipFlow.Domain.Search;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace EquipFlow.Application.Tests.Search;
@@ -56,11 +58,15 @@ public sealed class SearchDocumentsQueryHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(callInfo => callInfo.ArgAt<IReadOnlyList<RetrievedChunk>>(1));
 
+        // Set threshold to 0.0 for this specific test to preserve existing assertions for lower-scoring mock chunks
+        var testOptions = Microsoft.Extensions.Options.Options.Create(new AgenticOptions { MinRelevanceScore = 0.0 });
+        
         var handler = new SearchDocumentsQueryHandler(
             embeddingPort,
             vectorSearchPort,
             keywordSearchPort,
             new ReciprocalRankFusionService(),
+            testOptions,
             rerankerPort);
 
         // Act
@@ -170,12 +176,16 @@ public sealed class SearchDocumentsQueryHandlerTests
         keywordSearchPort.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(keywordResults));
 
+        // Set threshold to 0.0 for tests to preserve existing mock chunk score assertions
+        var testOptions = Microsoft.Extensions.Options.Options.Create(new AgenticOptions { MinRelevanceScore = 0.0 });
+
         return (
             new SearchDocumentsQueryHandler(
                 embeddingPort,
                 vectorSearchPort,
                 keywordSearchPort,
                 new ReciprocalRankFusionService(),
+                testOptions,
                 rerankerPort),
             embeddingPort,
             vectorSearchPort,
