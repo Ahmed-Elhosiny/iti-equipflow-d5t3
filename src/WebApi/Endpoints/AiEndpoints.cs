@@ -292,7 +292,7 @@ public static class AiEndpoints
             result.FallbackSearchResults?.Select(r => new CitationDto(r.DocumentId.ToString(), r.ChunkId.ToString(), null, null, (float)r.Score)));
 
 
-    private sealed record AgentContext(string CorrelationId, string UserId) : IAgentContext;
+    private sealed record AgentContext(string CorrelationId, string UserId, string? ReservationId = null) : IAgentContext;
 }
 
 public record ChatRequest(

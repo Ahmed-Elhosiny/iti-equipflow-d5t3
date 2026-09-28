@@ -4,7 +4,6 @@ using EquipFlow.Application.Agentic.Contracts;
 using EquipFlow.Application.Agentic.Events;
 using EquipFlow.Application.Ports;
 using EquipFlow.Application.Search.Queries;
-using EquipFlow.Domain.Budget.ValueObjects;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -85,6 +84,7 @@ public sealed class SequentialSupervisorOrchestrator(
             }
 
             reservationId = reservation.ReservationId!.Value;
+             eventCollector.ReservationId = reservationId.Value.ToString();
 
             var symptomResult = await ExecuteStepAsync(
                 symptomMatcher,
@@ -316,6 +316,7 @@ public sealed class SequentialSupervisorOrchestrator(
         public string CorrelationId => correlationId.ToString();
 
         public string UserId => source.UserId;
+        public string? ReservationId { get; set; }
 
         public void Add(AgentEventBase @event) 
         {

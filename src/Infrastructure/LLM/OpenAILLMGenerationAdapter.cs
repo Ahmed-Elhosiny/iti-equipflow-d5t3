@@ -48,6 +48,11 @@ public sealed class OpenAILLMGenerationAdapter : ILLMGenerationPort
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (string.IsNullOrWhiteSpace(request.ReservationId))
+        {
+            throw new InvalidOperationException("ADR-004 Violation: LLM generation requires a valid Budget ReservationId.");
+        }
+
 
         try
         {
@@ -114,6 +119,10 @@ public sealed class OpenAILLMGenerationAdapter : ILLMGenerationPort
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+         if (string.IsNullOrWhiteSpace(request.ReservationId))
+        {
+            throw new InvalidOperationException("ADR-004 Violation: LLM generation requires a valid Budget ReservationId.");
+        }
 
         IAsyncEnumerator<StreamingChatCompletionUpdate> updates;
         try

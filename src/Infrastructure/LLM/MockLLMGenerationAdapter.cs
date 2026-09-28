@@ -18,6 +18,13 @@ public sealed class MockLLMGenerationAdapter : ILLMGenerationPort
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
+        
+        if (string.IsNullOrWhiteSpace(request.ReservationId))
+        {
+            throw new InvalidOperationException("ADR-004 Violation: LLM generation requires a valid Budget ReservationId.");
+        }
+
+
         var promptLength = 0;
         foreach (var message in request.Messages)
         {
@@ -40,6 +47,10 @@ public sealed class MockLLMGenerationAdapter : ILLMGenerationPort
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (string.IsNullOrWhiteSpace(request.ReservationId))
+        {
+            throw new InvalidOperationException("ADR-004 Violation: LLM generation requires a valid Budget ReservationId.");
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
         yield return new LLMStreamChunk("Mock ", null, false, null);

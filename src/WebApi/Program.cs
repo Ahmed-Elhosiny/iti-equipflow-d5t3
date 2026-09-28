@@ -366,6 +366,7 @@ file sealed class ConfiguredLlmProvider(
                 tool.Description,
                 tool.ParametersJsonSchema)).ToArray(),
             request.Temperature,
-            request.MaxTokens);
+            request.MaxTokens,
+            request.ReservationId);
     }
 }
