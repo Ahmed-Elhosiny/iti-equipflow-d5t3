@@ -16,6 +16,7 @@ public sealed class SequentialSupervisorOrchestrator(
     ICostGovernor costGovernor,
     IAgentEventStore agentEventStore,
     ISender sender,
+    ITokenEstimator tokenEstimator, // <-- ADDED
     ILogger<SequentialSupervisorOrchestrator> logger,
     ICachePort? cachePort = null)
 {
@@ -60,10 +61,14 @@ public sealed class SequentialSupervisorOrchestrator(
 
         try
         {
+            // Genuine pre-flight estimation derived from prompt/context size (GAP-2)
+            var estimatedTokens = tokenEstimator.EstimateTokens(request.SymptomDescription);
+            const decimal preFlightPricePer1KTokens = 0.01m; // Blended average rate for estimation; actual cost reconciled later
+
             var reservation = await costGovernor.EstimateAndReserveAsync(
                 resolvedUserId,
-                estimatedTokens: 3000,
-                pricePerThousandTokens: 0.01m,
+                estimatedTokens: estimatedTokens,
+                pricePerThousandTokens: preFlightPricePer1KTokens,
                 workflowToken,
                 semanticQuery: request.SymptomDescription);
 

@@ -148,6 +148,8 @@ builder.Services.AddHostedService<EquipFlow.Infrastructure.BackgroundServices.Bu
 builder.Services.AddScoped<SequentialSupervisorOrchestrator>();
 builder.Services.AddRagSearchInfrastructure();
 builder.Services.AddScoped<EquipFlow.Application.Budget.Ports.IRunSpendRepository, EquipFlow.Infrastructure.Persistence.Repositories.RunSpendRepository>();
+builder.Services.AddSingleton<EquipFlow.Application.Ports.ITokenEstimator, EquipFlow.Infrastructure.Text.HeuristicTokenEstimator>();
+
 
 builder.Services.AddLLMProviders(builder.Configuration);
 
