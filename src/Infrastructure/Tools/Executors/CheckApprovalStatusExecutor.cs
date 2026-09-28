@@ -9,7 +9,7 @@ using MediatR;
 namespace EquipFlow.Infrastructure.Tools.Executors;
 
 /// <summary>
-/// Executes the <c>check_approval_status</c> tool.
+/// Executes the <c>CheckApprovalStatus</c> tool.
 /// </summary>
 /// <param name="sender">The mediator used to query the work order.</param>
 public sealed class CheckApprovalStatusExecutor(ISender sender) : IToolExecutor
@@ -22,14 +22,11 @@ public sealed class CheckApprovalStatusExecutor(ISender sender) : IToolExecutor
     /// <summary>
     /// Gets the name of the tool handled by this executor.
     /// </summary>
-    public string ToolName => "check_approval_status";
+    public string ToolName => "CheckApprovalStatus";
 
     /// <summary>
     /// Deserializes the tool arguments and retrieves the work order approval status.
     /// </summary>
-    /// <param name="arguments">The JSON arguments supplied to the tool.</param>
-    /// <param name="cancellationToken">The token used to cancel execution.</param>
-    /// <returns>A successful result containing the approval status, or a failure result.</returns>
     public Task<ToolExecutionResult> ExecuteAsync(
         JsonElement arguments,
         CancellationToken cancellationToken = default) =>
@@ -48,7 +45,7 @@ public sealed class CheckApprovalStatusExecutor(ISender sender) : IToolExecutor
                 return new ToolExecutionResult(
                     false,
                     null,
-                    "The check_approval_status arguments could not be deserialized.");
+                    "The CheckApprovalStatus arguments could not be deserialized.");
             }
 
             var workOrder = await sender.Send(
@@ -75,7 +72,7 @@ public sealed class CheckApprovalStatusExecutor(ISender sender) : IToolExecutor
             return new ToolExecutionResult(
                 false,
                 null,
-                $"The check_approval_status arguments are invalid: {exception.Message}");
+                $"The CheckApprovalStatus arguments are invalid: {exception.Message}");
         }
         catch (ValidationException exception)
         {
@@ -117,7 +114,7 @@ public sealed class CheckApprovalStatusExecutor(ISender sender) : IToolExecutor
                 ToolDispatchStatus.ExecutorFailed,
                 null,
                 "CHECK_APPROVAL_STATUS_FAILED",
-                $"The check_approval_status arguments are invalid: {exception.Message}");
+                $"The CheckApprovalStatus arguments are invalid: {exception.Message}");
         }
     }
 }

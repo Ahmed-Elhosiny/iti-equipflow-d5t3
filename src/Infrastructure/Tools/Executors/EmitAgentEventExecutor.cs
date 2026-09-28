@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace EquipFlow.Infrastructure.Tools.Executors;
 
 /// <summary>
-/// Executes the <c>emit_agent_event</c> tool.
+/// Executes the <c>EmitAgentEvent</c> tool.
 /// </summary>
 /// <param name="logger">The logger used to record agent events.</param>
 public sealed class EmitAgentEventExecutor(ILogger<EmitAgentEventExecutor> logger) : IToolExecutor
@@ -21,14 +21,11 @@ public sealed class EmitAgentEventExecutor(ILogger<EmitAgentEventExecutor> logge
     /// <summary>
     /// Gets the name of the tool handled by this executor.
     /// </summary>
-    public string ToolName => "emit_agent_event";
+    public string ToolName => "EmitAgentEvent";
 
     /// <summary>
     /// Deserializes the tool arguments and records the agent event.
     /// </summary>
-    /// <param name="arguments">The JSON arguments supplied to the tool.</param>
-    /// <param name="cancellationToken">The token used to cancel execution.</param>
-    /// <returns>A successful result confirming the event was recorded, or a failure result.</returns>
     public Task<ToolExecutionResult> ExecuteAsync(
         JsonElement arguments,
         CancellationToken cancellationToken = default) =>
@@ -49,7 +46,7 @@ public sealed class EmitAgentEventExecutor(ILogger<EmitAgentEventExecutor> logge
                 return Task.FromResult(new ToolExecutionResult(
                     false,
                     null,
-                    "The emit_agent_event arguments could not be deserialized."));
+                    "The EmitAgentEvent arguments could not be deserialized."));
             }
 
             if (string.IsNullOrWhiteSpace(request.AgentName)
@@ -57,7 +54,7 @@ public sealed class EmitAgentEventExecutor(ILogger<EmitAgentEventExecutor> logge
                 || string.IsNullOrWhiteSpace(request.Details))
             {
                 throw new ValidationException(
-                    "The emit_agent_event arguments must include agentName, eventName, and details.");
+                    "The EmitAgentEvent arguments must include agentName, eventName, and details.");
             }
 
             logger.LogInformation(
@@ -75,7 +72,7 @@ public sealed class EmitAgentEventExecutor(ILogger<EmitAgentEventExecutor> logge
             return Task.FromResult(new ToolExecutionResult(
                 false,
                 null,
-                $"The emit_agent_event arguments are invalid: {exception.Message}"));
+                $"The EmitAgentEvent arguments are invalid: {exception.Message}"));
         }
         catch (ValidationException exception)
         {
@@ -116,7 +113,7 @@ public sealed class EmitAgentEventExecutor(ILogger<EmitAgentEventExecutor> logge
                 ToolDispatchStatus.ExecutorFailed,
                 null,
                 "EMIT_AGENT_EVENT_FAILED",
-                $"The emit_agent_event arguments are invalid: {exception.Message}");
+                $"The EmitAgentEvent arguments are invalid: {exception.Message}");
         }
         catch (ValidationException exception)
         {
