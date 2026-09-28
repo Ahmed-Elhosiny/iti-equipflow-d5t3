@@ -19,6 +19,10 @@ public sealed class AppendConversationMessageCommandHandler(IConversationReposit
         }
 
         var message = conversation.AddMessage(request.Role, request.Content, request.Metadata);
+        
+        // Explicitly track the new message to prevent EF Core In-Memory concurrency exceptions
+        repository.AddMessage(message);
+        
         await repository.SaveChangesAsync(cancellationToken);
         return message.Id;
     }

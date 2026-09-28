@@ -8,6 +8,7 @@ using EquipFlow.Application.Agentic.Contracts;
 using EquipFlow.Application.Agentic.Events;
 using EquipFlow.Application.Agentic.Orchestration;
 using EquipFlow.Application.Agentic.Queries;
+using EquipFlow.Application.Conversations.Commands;
 using EquipFlow.WebApi.Middleware;
 using MediatR;
 
@@ -66,6 +67,7 @@ public static class AiEndpoints
         ChatRequest request,
         SequentialSupervisorOrchestrator orchestrator,
         IActiveRunRegistry runRegistry,
+        ISender sender,
         CancellationToken cancellationToken)
     {
         var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -91,6 +93,20 @@ public static class AiEndpoints
 
         try
         {
+            // 1. Resolve or Create Conversation (FR-7)
+            Guid conversationId;
+            if (request.ConversationId.HasValue)
+            {
+                conversationId = request.ConversationId.Value;
+            }
+            else
+            {
+                var title = string.IsNullOrWhiteSpace(request.Message) 
+                    ? "New Chat" 
+                    : (request.Message.Length > 50 ? request.Message[..50] + "..." : request.Message);
+                conversationId = await sender.Send(new StartConversationCommand(userId, title), runCts.Token);
+            }
+
             var maintenanceRequest = new MaintenanceRequest(
                 userId,
                 request.Message,
@@ -123,6 +139,21 @@ public static class AiEndpoints
                 await httpContext.Response.Body.FlushAsync(runCts.Token);
             }
 
+            // Emit the resolved conversation ID immediately so the client can track it
+            await EmitEventAsync(new ChatStreamEvent("conversation.id", runId, null, new { conversationId }));
+
+            // 2. Append User Message
+            try
+            {
+                await sender.Send(new AppendConversationMessageCommand(
+                    conversationId, userId, "user", request.Message), runCts.Token);
+            }
+            catch (InvalidOperationException)
+            {
+                // Fail closed: User does not own this conversation (IDOR prevention)
+                return Results.NotFound();
+            }
+
             await foreach (var evt in channel.Reader.ReadAllAsync(runCts.Token))
             {
                 var eventType = evt.GetType().Name switch
@@ -135,22 +166,25 @@ public static class AiEndpoints
             }
 
             var workflowResult = await orchestratorTask;
+            string? assistantMessage = null;
 
             if (workflowResult.Status == WorkflowStatus.Blocked)
             {
                 // Emit the structured SDD §5.3 refusal DTO in-band (CG-005 / CG-008)
                 await EmitEventAsync(new ChatStreamEvent("budget.exhausted", runId, null, ToBudgetRefusal(workflowResult)));
+                assistantMessage = $"[Budget Exhausted] {workflowResult.ErrorMessage}";
             }
             else if (workflowResult.Status == WorkflowStatus.Failed || workflowResult.Status == WorkflowStatus.PartialSuccess)
             {
                 await EmitEventAsync(new ChatStreamEvent("refusal", runId, null, new { error = workflowResult.ErrorMessage }));
+                assistantMessage = $"[Error] {workflowResult.ErrorMessage}";
             }
             else
             {
-                var finalText = workflowResult.CachedResponse ?? workflowResult.Draft?.Summary ?? "Workflow completed.";
+                assistantMessage = workflowResult.CachedResponse ?? workflowResult.Draft?.Summary ?? "Workflow completed.";
                 
                 // Simulate token-level streaming by chunking the final text
-                var words = finalText.Split(' ');
+                var words = assistantMessage.Split(' ');
                 foreach (var word in words)
                 {
                     await EmitEventAsync(new ChatStreamEvent("token", runId, null, new { content = word + " " }));
@@ -163,7 +197,22 @@ public static class AiEndpoints
                 }
             }
 
-            await EmitEventAsync(new ChatStreamEvent("done", runId, null, new { status = workflowResult.Status.ToString() }));
+            // 3. Append Assistant Message
+            if (!string.IsNullOrWhiteSpace(assistantMessage))
+            {
+                var metadata = JsonSerializer.Serialize(new { runId = runId.ToString(), status = workflowResult.Status.ToString() });
+                try
+                {
+                    await sender.Send(new AppendConversationMessageCommand(
+                        conversationId, userId, "assistant", assistantMessage, metadata), runCts.Token);
+                }
+                catch (Exception)
+                {
+                    // Log but don't fail the HTTP response since the LLM already finished and streamed
+                }
+            }
+
+            await EmitEventAsync(new ChatStreamEvent("done", runId, null, new { status = workflowResult.Status.ToString(), conversationId }));
             
             return Results.Empty;
         }

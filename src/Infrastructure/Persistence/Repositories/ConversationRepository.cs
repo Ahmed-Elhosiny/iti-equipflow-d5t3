@@ -9,6 +9,7 @@ public sealed class ConversationRepository(EquipFlowDbContext context) : IConver
     public async Task<Conversation?> GetByIdAsync(Guid conversationId, CancellationToken cancellationToken = default)
     {
         return await context.Conversations
+            .AsTracking() // Ensure the entity is explicitly tracked for subsequent updates
             .Include(c => c.Messages.OrderBy(m => m.CreatedAtUtc))
             .FirstOrDefaultAsync(c => c.Id == conversationId, cancellationToken);
     }
@@ -25,7 +26,12 @@ public sealed class ConversationRepository(EquipFlowDbContext context) : IConver
     {
         await context.Conversations.AddAsync(conversation, cancellationToken);
     }
-
+     public void AddMessage(ConversationMessage message)
+    {
+        // Explicitly mark the new message as Added so EF Core doesn't mistake it 
+        // for an existing entity due to its pre-assigned Guid.
+        context.ConversationMessages.Add(message);
+    }
     public Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         return context.SaveChangesAsync(cancellationToken);
