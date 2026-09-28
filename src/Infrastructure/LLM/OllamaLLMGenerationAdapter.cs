@@ -45,7 +45,10 @@ public sealed class OllamaLLMGenerationAdapter : ILLMGenerationPort
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-
+        if (string.IsNullOrWhiteSpace(request.ReservationId))
+        {
+            throw new InvalidOperationException("ADR-004 Violation: LLM generation requires a valid Budget ReservationId.");
+        }
         var messages = request.Messages.Select(message => new
         {
             role = message.Role.ToString().ToLowerInvariant(),
@@ -134,7 +137,10 @@ public sealed class OllamaLLMGenerationAdapter : ILLMGenerationPort
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-
+        if (string.IsNullOrWhiteSpace(request.ReservationId))
+        {
+            throw new InvalidOperationException("ADR-004 Violation: LLM generation requires a valid Budget ReservationId.");
+        }
         var payload = new
         {
             model = _options.Value.Model,

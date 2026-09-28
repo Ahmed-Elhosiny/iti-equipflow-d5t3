@@ -11,4 +11,5 @@ public sealed record LLMRequest(
     IReadOnlyList<ChatMessage> Messages,
     IReadOnlyList<ToolDefinition>? Tools,
     double Temperature,
-    int? MaxTokens);
+    int? MaxTokens,
+    string? ReservationId = null);

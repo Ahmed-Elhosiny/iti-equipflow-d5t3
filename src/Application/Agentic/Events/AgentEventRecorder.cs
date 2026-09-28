@@ -15,7 +15,10 @@ public static class AgentEventRecorder
         CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
-        var completion = await provider.CompleteAsync(request, cancellationToken);
+        // ADR-004 / CG-010: Enforce BudgetReservationToken propagation
+        var enrichedRequest = request with { ReservationId = context.ReservationId };
+        
+        var completion = await provider.CompleteAsync(enrichedRequest, cancellationToken);
 
         if (context is IAgentEventCollector collector)
         {

@@ -1,7 +1,3 @@
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace EquipFlow.Application.Agentic.Abstractions;
 
 public interface ILLMProvider
@@ -29,7 +25,8 @@ public sealed record CompletionRequest(
     string? Model = null,
     IReadOnlyList<ToolDefinition>? Tools = null,
     float Temperature = 0.2f,
-    int? MaxTokens = null);
+    int? MaxTokens = null,
+    string? ReservationId = null);
 
 public sealed record CompletionResult(
     string Text,
