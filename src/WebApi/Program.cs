@@ -26,6 +26,7 @@ using Microsoft.OpenApi;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using EquipFlow.Application.Options;
 using EquipFlow.Application.Conversations.Ports;
+using Microsoft.Extensions.Options;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -163,6 +164,7 @@ builder.Services.AddScoped<ILLMProvider>(serviceProvider =>
     new ConfiguredLlmProvider(
         serviceProvider.GetRequiredService<EquipFlow.Application.Ports.LLM.ILLMProviderFactory>(),
         providerChain,
+        serviceProvider.GetRequiredService<IOptions<AgenticOptions>>(),
         serviceProvider.GetRequiredService<ILogger<ConfiguredLlmProvider>>()));
 
 builder.Services.AddScoped<EquipFlow.Application.Ports.LLM.ILLMGenerationPort>(serviceProvider =>
@@ -266,60 +268,94 @@ public partial class Program;
 file sealed class ConfiguredLlmProvider(
     EquipFlow.Application.Ports.LLM.ILLMProviderFactory providerFactory,
     IReadOnlyList<string> providerChain,
+    IOptions<AgenticOptions> agenticOptions,
     ILogger<ConfiguredLlmProvider> logger) : ILLMProvider
 {
+    private readonly int _maxLlmRetries = agenticOptions.Value.MaxLlmRetries;
+    private readonly int _baseDelayMs = agenticOptions.Value.LlmRetryBaseDelayMs;
+
     public async Task<CompletionResult> CompleteAsync(
         CompletionRequest request,
         CancellationToken cancellationToken = default)
     {
         Exception? lastException = null;
+        
         foreach (var providerName in providerChain)
         {
-            try
+            var generationPort = providerFactory.GetProvider(providerName);
+            var llmRequest = BuildRequest(request);
+            
+            for (int attempt = 0; attempt <= _maxLlmRetries; attempt++)
             {
-                var generationPort = providerFactory.GetProvider(providerName);
-                var llmRequest = BuildRequest(request);
-                var result = await generationPort.CompleteAsync(llmRequest, cancellationToken);
+                try
+                {
+                    var result = await generationPort.CompleteAsync(llmRequest, cancellationToken);
 
-                return new CompletionResult(
-                    result.Content ?? string.Empty,
-                    new TokenUsage(result.PromptTokens, result.CompletionTokens),
-                    result.FinishReason,
-                    result.ToolCalls?.Select(toolCall => new ToolCall(
-                        toolCall.Id,
-                        toolCall.Name,
-                        toolCall.ArgumentsJson)).ToArray());
-            }
-            catch (Exception ex) when (IsTransient(ex))
-            {
-                logger.LogWarning(ex, "Transient failure on provider {ProviderName}. Trying next in cascade.", providerName);
-                lastException = ex;
+                    return new CompletionResult(
+                        result.Content ?? string.Empty,
+                        new TokenUsage(result.PromptTokens, result.CompletionTokens),
+                        result.FinishReason,
+                        result.ToolCalls?.Select(toolCall => new ToolCall(
+                            toolCall.Id,
+                            toolCall.Name,
+                            toolCall.ArgumentsJson)).ToArray());
+                }
+                catch (Exception ex) when (IsTransient(ex) && attempt < _maxLlmRetries)
+                {
+                    var delay = TimeSpan.FromMilliseconds(_baseDelayMs * Math.Pow(2, attempt));
+                    logger.LogWarning(ex, "Transient failure on {ProviderName} (attempt {Attempt}/{Max}). Retrying in {Delay}ms.", 
+                        providerName, attempt + 1, _maxLlmRetries, delay.TotalMilliseconds);
+                    await Task.Delay(delay, cancellationToken);
+                }
+                catch (Exception ex) when (IsTransient(ex))
+                {
+                    logger.LogWarning(ex, "Transient failure on {ProviderName} after {Max} retries. Moving to next provider.", 
+                        providerName, _maxLlmRetries);
+                    lastException = ex;
+                    break; // Break out of retry loop, move to next provider in cascade
+                }
             }
         }
 
         throw new InvalidOperationException("All LLM providers in the fallback chain failed.", lastException);
     }
 
-           public async IAsyncEnumerable<StreamingChunk> StreamAsync(
+    public async IAsyncEnumerable<StreamingChunk> StreamAsync(
         CompletionRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         Exception? lastException = null;
+        
         foreach (var providerName in providerChain)
         {
+            var generationPort = providerFactory.GetProvider(providerName);
+            var llmRequest = BuildRequest(request);
             IAsyncEnumerable<EquipFlow.Application.Ports.LLM.LLMStreamChunk>? stream = null;
-            try
+
+            for (int attempt = 0; attempt <= _maxLlmRetries; attempt++)
             {
-                var generationPort = providerFactory.GetProvider(providerName);
-                var llmRequest = BuildRequest(request);
-                stream = generationPort.StreamAsync(llmRequest, cancellationToken);
+                try
+                {
+                    stream = generationPort.StreamAsync(llmRequest, cancellationToken);
+                    break; // Successfully initialized stream, break out of retry loop
+                }
+                catch (Exception ex) when (IsTransient(ex) && attempt < _maxLlmRetries)
+                {
+                    var delay = TimeSpan.FromMilliseconds(_baseDelayMs * Math.Pow(2, attempt));
+                    logger.LogWarning(ex, "Transient failure initializing stream on {ProviderName} (attempt {Attempt}/{Max}). Retrying in {Delay}ms.", 
+                        providerName, attempt + 1, _maxLlmRetries, delay.TotalMilliseconds);
+                    await Task.Delay(delay, cancellationToken);
+                }
+                catch (Exception ex) when (IsTransient(ex))
+                {
+                    logger.LogWarning(ex, "Transient failure initializing stream on {ProviderName} after {Max} retries. Moving to next provider.", 
+                        providerName, _maxLlmRetries);
+                    lastException = ex;
+                    break; // Break out of retry loop, move to next provider in cascade
+                }
             }
-            catch (Exception ex) when (IsTransient(ex))
-            {
-                logger.LogWarning(ex, "Transient failure initializing stream on {ProviderName}. Trying next in cascade.", providerName);
-                lastException = ex;
-                continue;
-            }
+
+            if (stream is null) continue;
 
             // Yielding happens outside the try-catch block to satisfy C# iterator rules
             await foreach (var chunk in stream.WithCancellation(cancellationToken))
@@ -332,6 +368,7 @@ file sealed class ConfiguredLlmProvider(
 
         throw new InvalidOperationException("All LLM providers in the fallback chain failed.", lastException);
     }
+
     private static bool IsTransient(Exception ex) =>
         ex is HttpRequestException or TaskCanceledException or TimeoutException;
 
