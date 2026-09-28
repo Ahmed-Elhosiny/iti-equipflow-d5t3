@@ -22,6 +22,9 @@ public sealed class DocumentRepository(EquipFlowDbContext context) : IDocumentRe
             .Include(document => document.Chunks)
             .FirstOrDefaultAsync(document => document.Id == id, cancellationToken);
 
+    public Task<Document?> GetByContentHashAsync(string contentHash, CancellationToken cancellationToken) =>
+        context.Documents
+            .FirstOrDefaultAsync(document => document.ContentHash == contentHash, cancellationToken);
     public async Task UpdateAsync(Document document, CancellationToken cancellationToken)
     {
         await context.SaveChangesAsync(cancellationToken);

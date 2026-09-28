@@ -9,5 +9,8 @@ public interface IDocumentRepository
     Task UpdateAsync(Document document, CancellationToken cancellationToken);
 
     Task<Document?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
+
+    Task<Document?> GetByContentHashAsync(string contentHash, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<Document>> GetAllAsync(CancellationToken cancellationToken);
 }
