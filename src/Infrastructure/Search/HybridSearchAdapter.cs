@@ -1,8 +1,10 @@
+using EquipFlow.Application.Options;
 using EquipFlow.Application.Ports;
 using EquipFlow.Application.Search.Models;
 using EquipFlow.Application.Search.Ports;
 using EquipFlow.Application.Search.Services;
 using EquipFlow.Domain.Search;
+using Microsoft.Extensions.Options;
 
 namespace EquipFlow.Infrastructure.Search;
 
@@ -12,19 +14,19 @@ namespace EquipFlow.Infrastructure.Search;
 /// </summary>
 public sealed class HybridSearchAdapter : ISearchPort
 {
-    private const double RelevanceThreshold = 0.0;
-
-    private readonly IEmbeddingPort _embeddingPort;
+     private readonly IEmbeddingPort _embeddingPort;
     private readonly IVectorSearchPort _vectorSearchPort;
     private readonly IKeywordSearchPort _keywordSearchPort;
     private readonly ReciprocalRankFusionService _fusionService;
     private readonly IRerankerPort? _rerankerPort;
+    private readonly double _relevanceThreshold;
 
     public HybridSearchAdapter(
         IEmbeddingPort embeddingPort,
         IVectorSearchPort vectorSearchPort,
         IKeywordSearchPort keywordSearchPort,
         ReciprocalRankFusionService fusionService,
+        IOptions<AgenticOptions> options,
         IRerankerPort? rerankerPort = null)
     {
         _embeddingPort = embeddingPort;
@@ -32,6 +34,7 @@ public sealed class HybridSearchAdapter : ISearchPort
         _keywordSearchPort = keywordSearchPort;
         _fusionService = fusionService;
         _rerankerPort = rerankerPort;
+        _relevanceThreshold = options.Value.MinRelevanceScore;
     }
 
     public async Task<IReadOnlyList<SearchResult>> SearchAsync(
@@ -70,7 +73,7 @@ public sealed class HybridSearchAdapter : ISearchPort
         }
 
         return candidates
-            .Where(candidate => candidate.Score >= RelevanceThreshold)
+            .Where(candidate => candidate.Score >= _relevanceThreshold)
             .Take(query.TopK)
             .Select((candidate, index) => SearchResult.Create(
                 candidate.ChunkId,
