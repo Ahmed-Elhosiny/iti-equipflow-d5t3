@@ -2,6 +2,7 @@ using EquipFlow.Application.Ports;
 using EquipFlow.Domain.Entities;
 using Microsoft.Extensions.Logging;
 using MediatR;
+using EquipFlow.Domain.Enums;
 
 namespace EquipFlow.Application.Features.Documents.Commands.IngestDocument;
 
@@ -44,6 +45,20 @@ public sealed class IngestDocumentCommandHandler
                 request.FileName,
                 cancellationToken);
             var cleanedText = string.Join(' ', rawText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+            // FR-010: Idempotent re-ingestion. Hash the cleaned content and short-circuit
+            // if a non-failed document with the same content already exists.
+            var contentHash = DocumentContentHasher.ComputeHash(cleanedText);
+            var existing = await _documentRepository.GetByContentHashAsync(contentHash, cancellationToken);
+            if (existing is not null && existing.Status != DocumentStatus.Failed)
+            {
+                _logger.LogInformation(
+                    "Document {FileName} matches existing document {DocumentId} by content hash. Skipping re-ingestion.",
+                    request.FileName,
+                    existing.Id);
+                return existing.Id;
+            }
+
             var chunks = _chunker.ChunkText(cleanedText);
             var embeddings = await _embeddingPort.GenerateEmbeddingsAsync(
                 chunks,
@@ -53,6 +68,7 @@ public sealed class IngestDocumentCommandHandler
                 throw new InvalidOperationException("The embedding count must match the chunk count.");
 
             document = new Document(request.FileName, request.Type, request.Metadata);
+            document.SetContentHash(contentHash);
             document.MarkAsProcessing();
 
             var documentChunks = new List<DocumentChunk>(chunks.Count);

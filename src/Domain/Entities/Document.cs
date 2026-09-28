@@ -12,6 +12,7 @@ public class Document
     public DocumentType Type { get; private set; }
     public DocumentStatus Status { get; private set; }
     public DocumentMetadata Metadata { get; private set; }
+    public string ContentHash { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
     public IReadOnlyList<DocumentChunk> Chunks => _chunks;
@@ -21,6 +22,7 @@ public class Document
     {
         Id = Guid.Empty;
         Title = string.Empty;
+        ContentHash = string.Empty;
         Metadata = null!;
         Status = DocumentStatus.Pending;
         CreatedAt = DateTime.MinValue;
@@ -37,11 +39,20 @@ public class Document
         Title = title;
         Type = type;
         Metadata = metadata;
+        ContentHash = string.Empty; 
         Status = DocumentStatus.Pending;
         CreatedAt = DateTime.UtcNow;
         UpdatedAt = CreatedAt;
     }
 
+    public void SetContentHash(string contentHash)
+    {
+        if (string.IsNullOrWhiteSpace(contentHash))
+            throw new ArgumentException("Content hash cannot be empty.", nameof(contentHash));
+
+        ContentHash = contentHash;
+        UpdatedAt = DateTime.UtcNow;
+    }
     public void MarkAsProcessing()
     {
         Status = DocumentStatus.Processing;
