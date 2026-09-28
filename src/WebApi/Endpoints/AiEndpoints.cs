@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Agentic.Commands;
@@ -33,7 +34,7 @@ public static class AiEndpoints
                 "Engineer",
                 "Manager"))
             .Produces<AnalyzeMaintenanceResponse>(StatusCodes.Status200OK)
-            .ProducesProblem(StatusCodes.Status402PaymentRequired)
+            .Produces<BudgetRefusalDto>(StatusCodes.Status402PaymentRequired)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
@@ -137,13 +138,8 @@ public static class AiEndpoints
 
             if (workflowResult.Status == WorkflowStatus.Blocked)
             {
-                await EmitEventAsync(new ChatStreamEvent("budget.exhausted", runId, null, new 
-                { 
-                    status = "budget_exhausted", 
-                    remaining = workflowResult.RemainingBudget?.ToString("C") ?? "$0.00",
-                    estimatedCost = workflowResult.EstimatedCost?.ToString("C") ?? "$0.00",
-                    options = new[] { "wait_for_reset" }
-                }));
+                // Emit the structured SDD §5.3 refusal DTO in-band (CG-005 / CG-008)
+                await EmitEventAsync(new ChatStreamEvent("budget.exhausted", runId, null, ToBudgetRefusal(workflowResult)));
             }
             else if (workflowResult.Status == WorkflowStatus.Failed || workflowResult.Status == WorkflowStatus.PartialSuccess)
             {
@@ -256,10 +252,9 @@ public static class AiEndpoints
                 WorkflowStatus.PendingApproval
                     or WorkflowStatus.PartialSuccess
                     or WorkflowStatus.Cached => Results.Ok(ToResponse(workflowResult)),
-                WorkflowStatus.Blocked => Results.Problem(
-                    statusCode: StatusCodes.Status402PaymentRequired,
-                    title: "Budget Exhausted",
-                    detail: workflowResult.ErrorMessage),
+                WorkflowStatus.Blocked => Results.Json(
+                    ToBudgetRefusal(workflowResult),
+                    statusCode: StatusCodes.Status402PaymentRequired),
                 WorkflowStatus.Failed => Results.Problem(
                     statusCode: StatusCodes.Status422UnprocessableEntity,
                     title: "Workflow Failed",
@@ -291,6 +286,20 @@ public static class AiEndpoints
             result.CachedResponse,
             result.FallbackSearchResults?.Select(r => new CitationDto(r.DocumentId.ToString(), r.ChunkId.ToString(), null, null, (float)r.Score)));
 
+    /// <summary>
+    /// Projects a blocked workflow result into the structured SDD §5.3 budget-refusal DTO (CG-005 / CG-008).
+    /// </summary>
+    private static BudgetRefusalDto ToBudgetRefusal(WorkflowResult result) =>
+        new(
+            Type: "budget_exhausted",
+            RemainingBudgetUsd: result.RemainingBudget ?? 0m,
+            EstimatedCostUsd: result.EstimatedCost ?? 0m,
+            Options:
+            [
+                "Wait for budget reset",
+                "Request budget increase",
+                "Try cheaper model tier"
+            ]);
 
     private sealed record AgentContext(string CorrelationId, string UserId, string? ReservationId = null) : IAgentContext;
 }
@@ -329,3 +338,13 @@ public record AnalyzeMaintenanceResponse(
     decimal? RemainingBudget = null,
     string? CachedResponse = null,
     IEnumerable<CitationDto>? FallbackCitations = null);
+
+/// <summary>
+/// Structured budget-refusal payload returned with HTTP 402, matching SYSTEM-DESIGN §5.3 exactly.
+/// Satisfies CG-005 (Hard Cut-Off) and CG-008 (Structured Refusal).
+/// </summary>
+public sealed record BudgetRefusalDto(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("remaining_budget_usd")] decimal RemainingBudgetUsd,
+    [property: JsonPropertyName("estimated_cost_usd")] decimal EstimatedCostUsd,
+    [property: JsonPropertyName("options")] IReadOnlyList<string> Options);
