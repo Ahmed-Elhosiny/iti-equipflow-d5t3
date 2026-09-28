@@ -125,10 +125,12 @@ if (string.IsNullOrWhiteSpace(openAiApiKey))
 else
 {
     builder.Services.AddSingleton<IEmbeddingPort, OpenAiEmbeddingAdapter>();
-}builder.Services.AddScoped<PdfDocumentExtractor>();
+}
+builder.Services.AddScoped<PdfDocumentExtractor>();
 builder.Services.AddScoped<DocxDocumentExtractor>();
-builder.Services.AddScoped<IDocumentExtractor>(serviceProvider =>
-    serviceProvider.GetRequiredService<PdfDocumentExtractor>());
+// Route extraction dynamically based on file extension (FR-1)
+builder.Services.AddScoped<IDocumentExtractor, DocumentExtractorRouter>();
+
 builder.Services.AddScoped<SymptomMatcherAgent>();
 builder.Services.AddScoped<IAgent<SymptomMatchInput, SymptomMatchOutput>>(serviceProvider =>
     serviceProvider.GetRequiredService<SymptomMatcherAgent>());
