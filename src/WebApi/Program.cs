@@ -257,6 +257,7 @@ app.MapAiEndpoints();
 app.MapEquipmentEndpoints();
 app.MapMaintenanceEndpoints(); 
 app.MapWorkOrderEndpoints();
+app.MapConversationEndpoints();
 
 app.Run();
 
