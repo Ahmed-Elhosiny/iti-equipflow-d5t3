@@ -113,7 +113,7 @@ public static class AiEndpoints
                 conversationId = await sender.Send(new StartConversationCommand(userId, title), runCts.Token);
             }
 
-            var maintenanceRequest = new MaintenanceRequest(
+                       var maintenanceRequest = new MaintenanceRequest(
                 userId,
                 request.Message,
                 request.EquipmentContext);
@@ -121,11 +121,27 @@ public static class AiEndpoints
 
             void OnAgentEvent(AgentEventBase evt) => channel.Writer.TryWrite(evt);
 
+            // 2. Append User Message (Moved BEFORE response stream starts to safely handle IDOR 404s)
+            try
+            {
+                await sender.Send(new AppendConversationMessageCommand(
+                    conversationId, userId, "user", request.Message), runCts.Token);
+            }
+            catch (InvalidOperationException)
+            {
+                // Fail closed: User does not own this conversation (IDOR prevention)
+                return Results.NotFound();
+            }
+
+            // FIX: Create a dedicated DI scope for the background orchestrator task 
+            // to prevent DbContext concurrency exceptions with the main request thread.
             var orchestratorTask = Task.Run(async () =>
             {
+                using var scope = httpContext.RequestServices.GetRequiredService<IServiceScopeFactory>().CreateScope();
+                var scopedOrchestrator = scope.ServiceProvider.GetRequiredService<SequentialSupervisorOrchestrator>();
                 try
                 {
-                    return await orchestrator.RunWorkflowAsync(
+                    return await scopedOrchestrator.RunWorkflowAsync(
                         maintenanceRequest,
                         agentContext,
                         OnAgentEvent,
@@ -147,18 +163,6 @@ public static class AiEndpoints
 
             // Emit the resolved conversation ID immediately so the client can track it
             await EmitEventAsync(new ChatStreamEvent("conversation.id", runId, null, new { conversationId }));
-
-            // 2. Append User Message
-            try
-            {
-                await sender.Send(new AppendConversationMessageCommand(
-                    conversationId, userId, "user", request.Message), runCts.Token);
-            }
-            catch (InvalidOperationException)
-            {
-                // Fail closed: User does not own this conversation (IDOR prevention)
-                return Results.NotFound();
-            }
 
             await foreach (var evt in channel.Reader.ReadAllAsync(runCts.Token))
             {
