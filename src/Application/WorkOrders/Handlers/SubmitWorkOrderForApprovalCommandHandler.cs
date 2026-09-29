@@ -15,7 +15,7 @@ public class SubmitWorkOrderForApprovalCommandHandler : IRequestHandler<SubmitWo
         _repository = repository;
     }
 
-    public async Task HandleAsync(SubmitWorkOrderForApprovalCommand command, CancellationToken cancellationToken = default)
+    public async Task Handle(SubmitWorkOrderForApprovalCommand command, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(command.SubmittedBy))
             throw new ArgumentException("SubmittedBy cannot be empty.", nameof(command.SubmittedBy));
@@ -26,10 +26,5 @@ public class SubmitWorkOrderForApprovalCommandHandler : IRequestHandler<SubmitWo
         workOrder.SubmitForApproval(command.SubmittedBy);
 
         await _repository.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task Handle(SubmitWorkOrderForApprovalCommand request, CancellationToken cancellationToken)
-    {
-        await HandleAsync(request, cancellationToken);
     }
 }

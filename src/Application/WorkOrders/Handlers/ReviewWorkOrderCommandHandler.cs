@@ -15,7 +15,7 @@ public class ReviewWorkOrderCommandHandler : IRequestHandler<ReviewWorkOrderComm
         _repository = repository;
     }
 
-    public async Task HandleAsync(ReviewWorkOrderCommand command, CancellationToken cancellationToken = default)
+    public async Task Handle(ReviewWorkOrderCommand command, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(command.ReviewerUserId))
             throw new ArgumentException("ReviewerUserId cannot be empty.", nameof(command.ReviewerUserId));
@@ -47,10 +47,5 @@ public class ReviewWorkOrderCommandHandler : IRequestHandler<ReviewWorkOrderComm
         }
 
         await _repository.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task Handle(ReviewWorkOrderCommand request, CancellationToken cancellationToken)
-    {
-        await HandleAsync(request, cancellationToken);
     }
 }

@@ -14,7 +14,7 @@ public class DispatchWorkOrderCommandHandler : IRequestHandler<DispatchWorkOrder
         _repository = repository;
     }
 
-    public async Task HandleAsync(DispatchWorkOrderCommand command, CancellationToken cancellationToken = default)
+    public async Task Handle(DispatchWorkOrderCommand command, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(command.DispatcherUserId))
             throw new ArgumentException("DispatcherUserId cannot be empty.", nameof(command.DispatcherUserId));
@@ -25,10 +25,5 @@ public class DispatchWorkOrderCommandHandler : IRequestHandler<DispatchWorkOrder
         workOrder.MarkDispatched();
 
         await _repository.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task Handle(DispatchWorkOrderCommand request, CancellationToken cancellationToken)
-    {
-        await HandleAsync(request, cancellationToken);
     }
 }
