@@ -311,6 +311,12 @@ file sealed class ConfiguredLlmProvider(
         CompletionRequest request,
         CancellationToken cancellationToken = default)
     {
+        // CG-010 / ADR-004: Fail-closed at the provider boundary. No reservation token = no call.
+        if (string.IsNullOrWhiteSpace(request.ReservationId))
+        {
+            throw new InvalidOperationException("ADR-004 Violation: LLM execution requires a valid Budget ReservationId.");
+        }
+
         Exception? lastException = null;
         
         foreach (var providerName in providerChain)
@@ -357,6 +363,12 @@ file sealed class ConfiguredLlmProvider(
         CompletionRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+         // CG-010 / ADR-004: Fail-closed at the provider boundary. No reservation token = no call.
+        if (string.IsNullOrWhiteSpace(request.ReservationId))
+        {
+            throw new InvalidOperationException("ADR-004 Violation: LLM execution requires a valid Budget ReservationId.");
+        }
+        
         Exception? lastException = null;
         
         foreach (var providerName in providerChain)
