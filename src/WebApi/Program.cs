@@ -32,6 +32,20 @@ using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// >>> SECURITY GUARD: Fail-fast in Production if JWT key is insecure <<<
+var jwtKey = builder.Configuration["Jwt:Key"];
+var defaultPlaceholder = "CHANGE_ME_TO_A_LONG_RANDOM_STRING_AT_LEAST_32_CHARS";
+
+if (builder.Environment.IsProduction() && 
+    (string.IsNullOrWhiteSpace(jwtKey) || jwtKey == defaultPlaceholder))
+{
+    throw new InvalidOperationException(
+        "FATAL SECURITY MISCONFIGURATION: JWT signing key is missing or using the default placeholder in Production. " +
+        "Please configure a strong, secure JWT__Key via environment variables or a secrets manager.");
+}
+// >>> END SECURITY GUARD <<<
+
+
 // Add services to the container.
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
