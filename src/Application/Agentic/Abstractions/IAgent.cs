@@ -16,6 +16,7 @@ public interface IAgentContext
 {
     string CorrelationId { get; }
     string UserId { get; }
+    string UserRole { get; } 
     string? ReservationId { get; }
 }
 

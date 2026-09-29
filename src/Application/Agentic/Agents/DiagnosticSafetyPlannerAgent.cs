@@ -185,7 +185,7 @@ public sealed class DiagnosticSafetyPlannerAgent(
     private ToolInvocationContext CreateInvocationContext(IAgentContext context) =>
         new(
             ParseGuid(context.UserId),
-            "Technician",
+            context.UserRole,
             ParseGuid(context.CorrelationId),
             Guid.NewGuid(),
             Name,
