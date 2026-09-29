@@ -23,8 +23,10 @@ public static class AiEndpoints
             .WithTags("Chat")
             .WithSummary("Conversational AI entry point with SSE streaming")
             .RequireAuthorization()
+            .RequireRateLimiting("fixed_ai")
             .Produces(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status402PaymentRequired)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests) 
             .Produces(StatusCodes.Status401Unauthorized);
 
         app.MapPost("/api/ai/analyze", AnalyzeMaintenance)
@@ -34,9 +36,11 @@ public static class AiEndpoints
                 "Technician",
                 "Engineer",
                 "Manager"))
+            .RequireRateLimiting("fixed_ai")
             .Produces<AnalyzeMaintenanceResponse>(StatusCodes.Status200OK)
             .Produces<BudgetRefusalDto>(StatusCodes.Status402PaymentRequired)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 

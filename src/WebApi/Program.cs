@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using EquipFlow.Application.Agentic.Abstractions;
 using EquipFlow.Application.Agentic.Agents;
 using EquipFlow.Application.Agentic.Contracts;
@@ -27,7 +28,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using EquipFlow.Application.Options;
 using EquipFlow.Application.Conversations.Ports;
 using Microsoft.Extensions.Options;
-
+using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -61,11 +62,28 @@ builder.Services.AddMediatR(configuration =>
     configuration.RegisterServicesFromAssembly(typeof(SearchDocumentsQuery).Assembly));
 builder.Services.AddOptions<JwtOptions>()
     .Bind(builder.Configuration.GetSection(JwtOptions.SectionName));
-builder.Services.AddOptions<JwtOptions>()
-    .Bind(builder.Configuration.GetSection(JwtOptions.SectionName));
 
 builder.Services.AddOptions<AgenticOptions>()
     .Bind(builder.Configuration.GetSection(AgenticOptions.SectionName));
+
+// Configure Rate Limiting 
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("fixed_ai", opt =>
+    {
+        opt.PermitLimit = 10;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 2;
+    });
+    
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        await context.HttpContext.Response.WriteAsJsonAsync(new { error = "Too many requests. Please try again later." }, token);
+    };
+});
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -131,7 +149,7 @@ else
 }
 builder.Services.AddScoped<PdfDocumentExtractor>();
 builder.Services.AddScoped<DocxDocumentExtractor>();
-// Route extraction dynamically based on file extension (FR-1)
+// Route extraction dynamically according to file extension (FR-1)
 builder.Services.AddScoped<IDocumentExtractor, DocumentExtractorRouter>();
 
 builder.Services.AddScoped<SymptomMatcherAgent>();
@@ -152,7 +170,6 @@ builder.Services.AddScoped<SequentialSupervisorOrchestrator>();
 builder.Services.AddRagSearchInfrastructure();
 builder.Services.AddScoped<EquipFlow.Application.Budget.Ports.IRunSpendRepository, EquipFlow.Infrastructure.Persistence.Repositories.RunSpendRepository>();
 builder.Services.AddSingleton<EquipFlow.Application.Ports.ITokenEstimator, EquipFlow.Infrastructure.Text.HeuristicTokenEstimator>();
-
 
 builder.Services.AddLLMProviders(builder.Configuration);
 
@@ -191,9 +208,11 @@ if (isSeedMode)
 }
 
 // Configure the HTTP request pipeline.
+app.UseMiddleware<SecurityHeadersMiddleware>(); // Inject OWASP headers early
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter(); // Enforce rate limits after AuthZ so we can identify users if needed
 app.UseAntiforgery();
 
 if (app.Environment.IsDevelopment())
