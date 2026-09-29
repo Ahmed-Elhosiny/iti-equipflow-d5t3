@@ -86,7 +86,7 @@ public static class AiEndpoints
         var runId = Guid.TryParse(correlationId, out var parsedRunId) ? parsedRunId : Guid.NewGuid();
         
         using var runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        runRegistry.Register(runId, runCts);
+        runRegistry.Register(runId, userId, runCts);
 
         httpContext.Response.ContentType = "text/event-stream";
         httpContext.Response.Headers.Append("X-Correlation-Id", correlationId);
@@ -230,13 +230,22 @@ public static class AiEndpoints
         }
     }
 
-    private static async Task<IResult> CancelAgentRun(
+        private static async Task<IResult> CancelAgentRun(
         Guid runId,
+        ClaimsPrincipal user,
         ISender sender,
         CancellationToken cancellationToken)
     {
-        var cancelled = await sender.Send(new CancelAgentRunCommand(runId), cancellationToken);
-        return cancelled ? Results.NoContent() : Results.NotFound();
+        var userId = user.GetUserId()?.ToString();
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var cancelled = await sender.Send(new CancelAgentRunCommand(runId, userId), cancellationToken);
+        
+        // Returns 404 if the run doesn't exist OR if the user doesn't own it (prevents IDOR enumeration)
+        return cancelled ? Results.NoContent() : Results.NotFound(); 
     }
 
        private static async Task<IResult> GetAgentRunById(
@@ -284,7 +293,7 @@ public static class AiEndpoints
         var runId = Guid.TryParse(correlationId, out var parsedRunId) ? parsedRunId : Guid.NewGuid();
         using var runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         
-        runRegistry.Register(runId, runCts);
+        runRegistry.Register(runId, userId, runCts);
 
         try
         {
