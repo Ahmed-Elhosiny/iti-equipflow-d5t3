@@ -21,7 +21,7 @@ public class CompleteSafetyPrerequisiteCommandHandlerTests
             "Test Symptom",
             "Test Equipment",
             "Test User");
-        var workOrderId = await createHandler.HandleAsync(createCommand);
+        var workOrderId = await createHandler.Handle(createCommand);
 
         var addHandler = new AddSafetyPrerequisiteCommandHandler(repository);
         var addCommand = new AddSafetyPrerequisiteCommand(
@@ -29,7 +29,7 @@ public class CompleteSafetyPrerequisiteCommandHandlerTests
             "Wear safety goggles",
             true,
             1);
-        await addHandler.HandleAsync(addCommand);
+        await addHandler.Handle(addCommand);
 
         var workOrder = repository.GetSavedWorkOrder(workOrderId);
         var prerequisiteId = workOrder!.SafetyPrerequisites.First().Id;
@@ -41,7 +41,7 @@ public class CompleteSafetyPrerequisiteCommandHandlerTests
             "Completed successfully");
 
         // Act
-        await completeHandler.HandleAsync(command);
+        await completeHandler.Handle(command);
 
         // Assert
         var savedWorkOrder = repository.GetSavedWorkOrder(workOrderId);
@@ -65,7 +65,7 @@ public class CompleteSafetyPrerequisiteCommandHandlerTests
             null);
 
         // Act & Assert
-        await Assert.ThrowsAsync<WorkOrderNotFoundException>(() => handler.HandleAsync(command));
+        await Assert.ThrowsAsync<WorkOrderNotFoundException>(() => handler.Handle(command));
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class CompleteSafetyPrerequisiteCommandHandlerTests
             "Test Symptom",
             "Test Equipment",
             "Test User");
-        var workOrderId = await createHandler.HandleAsync(createCommand);
+        var workOrderId = await createHandler.Handle(createCommand);
 
         var command = new CompleteSafetyPrerequisiteCommand(
             workOrderId,
@@ -91,7 +91,7 @@ public class CompleteSafetyPrerequisiteCommandHandlerTests
             null);
 
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentException>(() => handler.HandleAsync(command));
+        await Assert.ThrowsAsync<ArgumentException>(() => handler.Handle(command));
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public class CompleteSafetyPrerequisiteCommandHandlerTests
             "Test Symptom",
             "Test Equipment",
             "Test User");
-        var workOrderId = await createHandler.HandleAsync(createCommand);
+        var workOrderId = await createHandler.Handle(createCommand);
 
         var addHandler = new AddSafetyPrerequisiteCommandHandler(repository);
         var addCommand = new AddSafetyPrerequisiteCommand(
@@ -116,7 +116,7 @@ public class CompleteSafetyPrerequisiteCommandHandlerTests
             "Wear safety goggles",
             true,
             1);
-        await addHandler.HandleAsync(addCommand);
+        await addHandler.Handle(addCommand);
 
         var workOrder = repository.GetSavedWorkOrder(workOrderId);
         var prerequisiteId = workOrder!.SafetyPrerequisites.First().Id;
@@ -128,7 +128,7 @@ public class CompleteSafetyPrerequisiteCommandHandlerTests
             null);
 
         // Act
-        await completeHandler.HandleAsync(command);
+        await completeHandler.Handle(command);
 
         // Assert
         Assert.True(repository.SaveChangesCalled);
@@ -147,6 +147,6 @@ public class CompleteSafetyPrerequisiteCommandHandlerTests
             null);
 
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentException>(() => handler.HandleAsync(command));
+        await Assert.ThrowsAsync<ArgumentException>(() => handler.Handle(command));
     }
 }

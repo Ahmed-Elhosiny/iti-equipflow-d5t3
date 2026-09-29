@@ -1,3 +1,5 @@
+using MediatR;
+
 namespace EquipFlow.Application.WorkOrders.Commands;
 
 public record CreateWorkOrderCommand(
@@ -7,4 +9,4 @@ public record CreateWorkOrderCommand(
     string CreatedBy,
     string? EquipmentAssetNumber = null,
     string? ManualRevision = null,
-    string? Location = null);
+    string? Location = null) : IRequest<Guid>;

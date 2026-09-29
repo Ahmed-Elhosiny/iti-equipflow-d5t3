@@ -1,10 +1,11 @@
 using EquipFlow.Application.Common;
 using EquipFlow.Application.WorkOrders.Commands;
 using EquipFlow.Application.WorkOrders.Ports;
+using MediatR;
 
 namespace EquipFlow.Application.WorkOrders.Handlers;
 
-public class AddSafetyPrerequisiteCommandHandler
+public class AddSafetyPrerequisiteCommandHandler : IRequestHandler<AddSafetyPrerequisiteCommand>
 {
     private readonly IWorkOrderRepository _repository;
 
@@ -13,7 +14,7 @@ public class AddSafetyPrerequisiteCommandHandler
         _repository = repository;
     }
 
-    public async Task HandleAsync(AddSafetyPrerequisiteCommand command, CancellationToken cancellationToken = default)
+    public async Task Handle(AddSafetyPrerequisiteCommand command, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(command.Description))
             throw new ArgumentException("Description cannot be empty.", nameof(command.Description));

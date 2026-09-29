@@ -1,10 +1,11 @@
 using EquipFlow.Application.WorkOrders.Ports;
 using EquipFlow.Application.WorkOrders.Commands;
 using EquipFlow.Domain.Entities;
+using MediatR;
 
 namespace EquipFlow.Application.WorkOrders.Handlers;
 
-public class CreateWorkOrderCommandHandler
+public class CreateWorkOrderCommandHandler : IRequestHandler<CreateWorkOrderCommand, Guid>
 {
     private readonly IWorkOrderRepository _repository;
 
@@ -13,7 +14,7 @@ public class CreateWorkOrderCommandHandler
         _repository = repository;
     }
 
-    public async Task<Guid> HandleAsync(CreateWorkOrderCommand command, CancellationToken cancellationToken = default)
+    public async Task<Guid> Handle(CreateWorkOrderCommand command, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(command.Title))
             throw new ArgumentException("Title cannot be empty.", nameof(command.Title));

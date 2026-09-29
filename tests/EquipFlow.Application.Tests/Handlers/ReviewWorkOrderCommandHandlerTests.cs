@@ -21,7 +21,7 @@ public class ReviewWorkOrderCommandHandlerTests
             null);
 
         // Act & Assert
-        await Assert.ThrowsAsync<WorkOrderNotFoundException>(() => handler.HandleAsync(command));
+        await Assert.ThrowsAsync<WorkOrderNotFoundException>(() => handler.Handle(command));
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public class ReviewWorkOrderCommandHandlerTests
             "Test Symptom",
             "Test Equipment",
             "Test User");
-        var workOrderId = await createHandler.HandleAsync(createCommand);
+        var workOrderId = await createHandler.Handle(createCommand);
 
         var addHandler = new AddSafetyPrerequisiteCommandHandler(repository);
         var addCommand = new AddSafetyPrerequisiteCommand(
@@ -46,7 +46,7 @@ public class ReviewWorkOrderCommandHandlerTests
             "Wear safety goggles",
             true,
             1);
-        await addHandler.HandleAsync(addCommand);
+        await addHandler.Handle(addCommand);
 
         var workOrder = repository.GetSavedWorkOrder(workOrderId);
         var prerequisiteId = workOrder!.SafetyPrerequisites.First().Id;
@@ -57,13 +57,13 @@ public class ReviewWorkOrderCommandHandlerTests
             prerequisiteId,
             "Test User",
             null);
-        await completeHandler.HandleAsync(completeCommand);
+        await completeHandler.Handle(completeCommand);
 
         var submitHandler = new SubmitWorkOrderForApprovalCommandHandler(repository);
         var submitCommand = new SubmitWorkOrderForApprovalCommand(
             workOrderId,
             "Test User");
-        await submitHandler.HandleAsync(submitCommand);
+        await submitHandler.Handle(submitCommand);
 
         var command = new ReviewWorkOrderCommand(
             workOrderId,
@@ -72,7 +72,7 @@ public class ReviewWorkOrderCommandHandlerTests
             "Looks good");
 
         // Act
-        await reviewHandler.HandleAsync(command);
+        await reviewHandler.Handle(command);
 
         // Assert
         var savedWorkOrder = repository.GetSavedWorkOrder(workOrderId);
@@ -96,7 +96,7 @@ public class ReviewWorkOrderCommandHandlerTests
             "Test Symptom",
             "Test Equipment",
             "Test User");
-        var workOrderId = await createHandler.HandleAsync(createCommand);
+        var workOrderId = await createHandler.Handle(createCommand);
 
         var addHandler = new AddSafetyPrerequisiteCommandHandler(repository);
         var addCommand = new AddSafetyPrerequisiteCommand(
@@ -104,7 +104,7 @@ public class ReviewWorkOrderCommandHandlerTests
             "Wear safety goggles",
             true,
             1);
-        await addHandler.HandleAsync(addCommand);
+        await addHandler.Handle(addCommand);
 
         var workOrder = repository.GetSavedWorkOrder(workOrderId);
         var prerequisiteId = workOrder!.SafetyPrerequisites.First().Id;
@@ -115,13 +115,13 @@ public class ReviewWorkOrderCommandHandlerTests
             prerequisiteId,
             "Test User",
             null);
-        await completeHandler.HandleAsync(completeCommand);
+        await completeHandler.Handle(completeCommand);
 
         var submitHandler = new SubmitWorkOrderForApprovalCommandHandler(repository);
         var submitCommand = new SubmitWorkOrderForApprovalCommand(
             workOrderId,
             "Test User");
-        await submitHandler.HandleAsync(submitCommand);
+        await submitHandler.Handle(submitCommand);
 
         var command = new ReviewWorkOrderCommand(
             workOrderId,
@@ -130,7 +130,7 @@ public class ReviewWorkOrderCommandHandlerTests
             null);
 
         // Act
-        await reviewHandler.HandleAsync(command);
+        await reviewHandler.Handle(command);
 
         // Assert
         var savedWorkOrder = repository.GetSavedWorkOrder(workOrderId);
@@ -153,7 +153,7 @@ public class ReviewWorkOrderCommandHandlerTests
             "Test Symptom",
             "Test Equipment",
             "Test User");
-        var workOrderId = await createHandler.HandleAsync(createCommand);
+        var workOrderId = await createHandler.Handle(createCommand);
 
         var addHandler = new AddSafetyPrerequisiteCommandHandler(repository);
         var addCommand = new AddSafetyPrerequisiteCommand(
@@ -161,7 +161,7 @@ public class ReviewWorkOrderCommandHandlerTests
             "Wear safety goggles",
             true,
             1);
-        await addHandler.HandleAsync(addCommand);
+        await addHandler.Handle(addCommand);
 
         var workOrder = repository.GetSavedWorkOrder(workOrderId);
         var prerequisiteId = workOrder!.SafetyPrerequisites.First().Id;
@@ -172,13 +172,13 @@ public class ReviewWorkOrderCommandHandlerTests
             prerequisiteId,
             "Test User",
             null);
-        await completeHandler.HandleAsync(completeCommand);
+        await completeHandler.Handle(completeCommand);
 
         var submitHandler = new SubmitWorkOrderForApprovalCommandHandler(repository);
         var submitCommand = new SubmitWorkOrderForApprovalCommand(
             workOrderId,
             "Test User");
-        await submitHandler.HandleAsync(submitCommand);
+        await submitHandler.Handle(submitCommand);
 
         var command = new ReviewWorkOrderCommand(
             workOrderId,
@@ -187,7 +187,7 @@ public class ReviewWorkOrderCommandHandlerTests
             "Needs more work");
 
         // Act
-        await reviewHandler.HandleAsync(command);
+        await reviewHandler.Handle(command);
 
         // Assert
         var savedWorkOrder = repository.GetSavedWorkOrder(workOrderId);
@@ -211,7 +211,7 @@ public class ReviewWorkOrderCommandHandlerTests
             "Test Symptom",
             "Test Equipment",
             "Test User");
-        var workOrderId = await createHandler.HandleAsync(createCommand);
+        var workOrderId = await createHandler.Handle(createCommand);
 
         var addHandler = new AddSafetyPrerequisiteCommandHandler(repository);
         var addCommand = new AddSafetyPrerequisiteCommand(
@@ -219,7 +219,7 @@ public class ReviewWorkOrderCommandHandlerTests
             "Wear safety goggles",
             true,
             1);
-        await addHandler.HandleAsync(addCommand);
+        await addHandler.Handle(addCommand);
 
         var workOrder = repository.GetSavedWorkOrder(workOrderId);
         var prerequisiteId = workOrder!.SafetyPrerequisites.First().Id;
@@ -230,13 +230,13 @@ public class ReviewWorkOrderCommandHandlerTests
             prerequisiteId,
             "Test User",
             null);
-        await completeHandler.HandleAsync(completeCommand);
+        await completeHandler.Handle(completeCommand);
 
         var submitHandler = new SubmitWorkOrderForApprovalCommandHandler(repository);
         var submitCommand = new SubmitWorkOrderForApprovalCommand(
             workOrderId,
             "Test User");
-        await submitHandler.HandleAsync(submitCommand);
+        await submitHandler.Handle(submitCommand);
 
         var command = new ReviewWorkOrderCommand(
             workOrderId,
@@ -245,7 +245,7 @@ public class ReviewWorkOrderCommandHandlerTests
             null);
 
         // Act
-        await reviewHandler.HandleAsync(command);
+        await reviewHandler.Handle(command);
 
         // Assert
         var savedWorkOrder = repository.GetSavedWorkOrder(workOrderId);
@@ -268,7 +268,7 @@ public class ReviewWorkOrderCommandHandlerTests
             "Test Symptom",
             "Test Equipment",
             "Test User");
-        var workOrderId = await createHandler.HandleAsync(createCommand);
+        var workOrderId = await createHandler.Handle(createCommand);
 
         var command = new ReviewWorkOrderCommand(
             workOrderId,
@@ -277,7 +277,7 @@ public class ReviewWorkOrderCommandHandlerTests
             null);
 
         // Act & Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() => reviewHandler.HandleAsync(command));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => reviewHandler.Handle(command));
     }
 
     [Fact]
@@ -294,7 +294,7 @@ public class ReviewWorkOrderCommandHandlerTests
             "Test Symptom",
             "Test Equipment",
             "Test User");
-        var workOrderId = await createHandler.HandleAsync(createCommand);
+        var workOrderId = await createHandler.Handle(createCommand);
 
         var addHandler = new AddSafetyPrerequisiteCommandHandler(repository);
         var addCommand = new AddSafetyPrerequisiteCommand(
@@ -302,7 +302,7 @@ public class ReviewWorkOrderCommandHandlerTests
             "Wear safety goggles",
             true,
             1);
-        await addHandler.HandleAsync(addCommand);
+        await addHandler.Handle(addCommand);
 
         var workOrder = repository.GetSavedWorkOrder(workOrderId);
         var prerequisiteId = workOrder!.SafetyPrerequisites.First().Id;
@@ -313,13 +313,13 @@ public class ReviewWorkOrderCommandHandlerTests
             prerequisiteId,
             "Test User",
             null);
-        await completeHandler.HandleAsync(completeCommand);
+        await completeHandler.Handle(completeCommand);
 
         var submitHandler = new SubmitWorkOrderForApprovalCommandHandler(repository);
         var submitCommand = new SubmitWorkOrderForApprovalCommand(
             workOrderId,
             "Test User");
-        await submitHandler.HandleAsync(submitCommand);
+        await submitHandler.Handle(submitCommand);
 
         var command = new ReviewWorkOrderCommand(
             workOrderId,
@@ -328,7 +328,7 @@ public class ReviewWorkOrderCommandHandlerTests
             null);
 
         // Act
-        await reviewHandler.HandleAsync(command);
+        await reviewHandler.Handle(command);
 
         // Assert
         Assert.True(repository.SaveChangesCalled);
@@ -347,7 +347,7 @@ public class ReviewWorkOrderCommandHandlerTests
             null);
 
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentException>(() => handler.HandleAsync(command));
+        await Assert.ThrowsAsync<ArgumentException>(() => handler.Handle(command));
     }
 
         [Fact]
@@ -359,22 +359,22 @@ public class ReviewWorkOrderCommandHandlerTests
         
         var createHandler = new CreateWorkOrderCommandHandler(repository);
         var createCommand = new CreateWorkOrderCommand("Test Title", "Test Symptom", "Test Equipment", "Test User");
-        var workOrderId = await createHandler.HandleAsync(createCommand);
+        var workOrderId = await createHandler.Handle(createCommand);
 
         var addHandler = new AddSafetyPrerequisiteCommandHandler(repository);
         var addCommand = new AddSafetyPrerequisiteCommand(workOrderId, "Wear safety goggles", true, 1);
-        await addHandler.HandleAsync(addCommand);
+        await addHandler.Handle(addCommand);
 
         var workOrder = repository.GetSavedWorkOrder(workOrderId);
         var prerequisiteId = workOrder!.SafetyPrerequisites.First().Id;
 
         var completeHandler = new CompleteSafetyPrerequisiteCommandHandler(repository);
         var completeCommand = new CompleteSafetyPrerequisiteCommand(workOrderId, prerequisiteId, "Test User", null);
-        await completeHandler.HandleAsync(completeCommand);
+        await completeHandler.Handle(completeCommand);
 
         var submitHandler = new SubmitWorkOrderForApprovalCommandHandler(repository);
         var submitCommand = new SubmitWorkOrderForApprovalCommand(workOrderId, "Test User");
-        await submitHandler.HandleAsync(submitCommand);
+        await submitHandler.Handle(submitCommand);
 
         var command = new ReviewWorkOrderCommand(
             workOrderId,
@@ -387,7 +387,7 @@ public class ReviewWorkOrderCommandHandlerTests
             null, null, null, null);
 
         // Act
-        await reviewHandler.HandleAsync(command);
+        await reviewHandler.Handle(command);
 
         // Assert
         var savedWorkOrder = repository.GetSavedWorkOrder(workOrderId);
@@ -407,22 +407,22 @@ public class ReviewWorkOrderCommandHandlerTests
         
         var createHandler = new CreateWorkOrderCommandHandler(repository);
         var createCommand = new CreateWorkOrderCommand("Test Title", "Test Symptom", "Test Equipment", "Test User");
-        var workOrderId = await createHandler.HandleAsync(createCommand);
+        var workOrderId = await createHandler.Handle(createCommand);
 
         var addHandler = new AddSafetyPrerequisiteCommandHandler(repository);
         var addCommand = new AddSafetyPrerequisiteCommand(workOrderId, "Wear safety goggles", true, 1);
-        await addHandler.HandleAsync(addCommand);
+        await addHandler.Handle(addCommand);
 
         var workOrder = repository.GetSavedWorkOrder(workOrderId);
         var prerequisiteId = workOrder!.SafetyPrerequisites.First().Id;
 
         var completeHandler = new CompleteSafetyPrerequisiteCommandHandler(repository);
         var completeCommand = new CompleteSafetyPrerequisiteCommand(workOrderId, prerequisiteId, "Test User", null);
-        await completeHandler.HandleAsync(completeCommand);
+        await completeHandler.Handle(completeCommand);
 
         var submitHandler = new SubmitWorkOrderForApprovalCommandHandler(repository);
         var submitCommand = new SubmitWorkOrderForApprovalCommand(workOrderId, "Test User");
-        await submitHandler.HandleAsync(submitCommand);
+        await submitHandler.Handle(submitCommand);
 
         var command = new ReviewWorkOrderCommand(
             workOrderId,
@@ -434,7 +434,7 @@ public class ReviewWorkOrderCommandHandlerTests
             null, null, null, null, null);
 
         // Act
-        await reviewHandler.HandleAsync(command);
+        await reviewHandler.Handle(command);
 
         // Assert
         var savedWorkOrder = repository.GetSavedWorkOrder(workOrderId);

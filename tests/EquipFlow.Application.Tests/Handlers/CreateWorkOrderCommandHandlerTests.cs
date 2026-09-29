@@ -19,7 +19,7 @@ public class CreateWorkOrderCommandHandlerTests
             "Test User");
 
         // Act
-        var result = await handler.HandleAsync(command);
+        var result = await handler.Handle(command);
 
         // Assert
         Assert.NotEqual(Guid.Empty, result);
@@ -42,7 +42,7 @@ public class CreateWorkOrderCommandHandlerTests
             "Test User");
 
         // Act
-        await handler.HandleAsync(command);
+        await handler.Handle(command);
 
         // Assert
         Assert.True(repository.SaveChangesCalled);
@@ -61,7 +61,7 @@ public class CreateWorkOrderCommandHandlerTests
             "Test User");
 
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentException>(() => handler.HandleAsync(command));
+        await Assert.ThrowsAsync<ArgumentException>(() => handler.Handle(command));
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public class CreateWorkOrderCommandHandlerTests
             "Test User");
 
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentException>(() => handler.HandleAsync(command));
+        await Assert.ThrowsAsync<ArgumentException>(() => handler.Handle(command));
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public class CreateWorkOrderCommandHandlerTests
             "Test User");
 
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentException>(() => handler.HandleAsync(command));
+        await Assert.ThrowsAsync<ArgumentException>(() => handler.Handle(command));
     }
 
     [Fact]
@@ -109,6 +109,6 @@ public class CreateWorkOrderCommandHandlerTests
             "");
 
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentException>(() => handler.HandleAsync(command));
+        await Assert.ThrowsAsync<ArgumentException>(() => handler.Handle(command));
     }
 }

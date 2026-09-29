@@ -5,7 +5,6 @@ using MediatR;
 
 namespace EquipFlow.Application.WorkOrders.Handlers;
 
-// Added `: IRequestHandler<CompleteSafetyPrerequisiteCommand>`
 public class CompleteSafetyPrerequisiteCommandHandler : IRequestHandler<CompleteSafetyPrerequisiteCommand>
 {
     private readonly IWorkOrderRepository _repository;
@@ -15,8 +14,7 @@ public class CompleteSafetyPrerequisiteCommandHandler : IRequestHandler<Complete
         _repository = repository;
     }
 
-    // Changed from `HandleAsync` to `Handle` to match MediatR's interface contract
-    public async Task Handle(CompleteSafetyPrerequisiteCommand command, CancellationToken cancellationToken)
+    public async Task Handle(CompleteSafetyPrerequisiteCommand command, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(command.CompletedBy))
             throw new ArgumentException("CompletedBy cannot be empty.", nameof(command.CompletedBy));
@@ -28,9 +26,4 @@ public class CompleteSafetyPrerequisiteCommandHandler : IRequestHandler<Complete
 
         await _repository.SaveChangesAsync(cancellationToken);
     }
-
-    
-    // Legacy wrapper to keep existing unit tests green without modifying them
-    public Task HandleAsync(CompleteSafetyPrerequisiteCommand command, CancellationToken cancellationToken = default) 
-        => Handle(command, cancellationToken);
-        }
+}
