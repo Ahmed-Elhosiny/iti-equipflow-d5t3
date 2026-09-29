@@ -14,10 +14,10 @@ public sealed class StaticAgentToolRegistryTests
     }
 
     [Fact]
-    public void DiagnosticSafetyPlanner_AllowsSearchManuals()
+    public void DiagnosticSafetyPlanner_DoesNotAllowSearchManuals()
     {
         var registry = new StaticAgentToolRegistry();
-        Assert.True(registry.IsToolAllowed("DiagnosticSafetyPlanner", "SearchManuals"));
+        Assert.False(registry.IsToolAllowed("DiagnosticSafetyPlanner", "SearchManuals"));
     }
 
     [Fact]
@@ -37,10 +37,10 @@ public sealed class StaticAgentToolRegistryTests
     }
 
     [Fact]
-    public void DiagnosticSafetyPlanner_AllowsQueryFaultHistory()
+    public void DiagnosticSafetyPlanner_DoesNotAllowQueryFaultHistory()
     {
         var registry = new StaticAgentToolRegistry();
-        Assert.True(registry.IsToolAllowed("DiagnosticSafetyPlanner", "QueryFaultHistory"));
+        Assert.False(registry.IsToolAllowed("DiagnosticSafetyPlanner", "QueryFaultHistory"));
     }
 
     [Fact]
