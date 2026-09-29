@@ -24,10 +24,8 @@ public sealed class StaticAgentToolRegistry : IAgentToolRegistry
             },
             ["DiagnosticSafetyPlanner"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "SearchManuals",
                 "GetEquipmentSpecs",
-                "GenerateSafetyChecklist",
-                "QueryFaultHistory"
+                "GenerateSafetyChecklist"
             },
             ["WorkOrderGenerator"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
