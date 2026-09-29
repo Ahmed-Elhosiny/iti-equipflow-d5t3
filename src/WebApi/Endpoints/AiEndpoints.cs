@@ -76,6 +76,8 @@ public static class AiEndpoints
     {
         var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? httpContext.User.FindFirstValue("sub");
+        var userRole = httpContext.User.FindFirstValue(ClaimTypes.Role) ?? "Technician";
+
 
         if (string.IsNullOrWhiteSpace(userId))
         {
@@ -115,7 +117,7 @@ public static class AiEndpoints
                 userId,
                 request.Message,
                 request.EquipmentContext);
-            var agentContext = new AgentContext(correlationId, userId);
+            var agentContext = new AgentContext(correlationId, userId, userRole);
 
             void OnAgentEvent(AgentEventBase evt) => channel.Writer.TryWrite(evt);
 
@@ -276,6 +278,7 @@ public static class AiEndpoints
     {
         var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? httpContext.User.FindFirstValue("sub");
+        var userRole = httpContext.User.FindFirstValue(ClaimTypes.Role) ?? "Technician";
 
         if (string.IsNullOrWhiteSpace(userId))
         {
@@ -301,7 +304,7 @@ public static class AiEndpoints
                 userId,
                 request.SymptomDescription,
                 request.EquipmentIdHint);
-            var agentContext = new AgentContext(correlationId, userId);
+            var agentContext = new AgentContext(correlationId, userId, userRole);
 
             var workflowResult = await orchestrator.RunWorkflowAsync(
                 maintenanceRequest,
@@ -363,7 +366,7 @@ public static class AiEndpoints
                 "Try cheaper model tier"
             ]);
 
-    private sealed record AgentContext(string CorrelationId, string UserId, string? ReservationId = null) : IAgentContext;
+    private sealed record AgentContext(string CorrelationId, string UserId, string UserRole, string? ReservationId = null) : IAgentContext;
 }
 
 public record ChatRequest(

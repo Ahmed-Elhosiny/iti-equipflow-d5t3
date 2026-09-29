@@ -312,7 +312,7 @@ public sealed class SequentialSupervisorOrchestrator(
     private Task ReleaseReservationAsync(string userId, Guid reservationId) =>
         costGovernor.ReleaseAsync(userId, reservationId, CancellationToken.None);
 
-    private sealed class RecordingAgentContext(
+        private sealed class RecordingAgentContext(
         IAgentContext source,
         Guid correlationId,
         List<AgentEventBase> collectedEvents,
@@ -321,6 +321,7 @@ public sealed class SequentialSupervisorOrchestrator(
         public string CorrelationId => correlationId.ToString();
 
         public string UserId => source.UserId;
+        public string UserRole => source.UserRole;
         public string? ReservationId { get; set; }
 
         public void Add(AgentEventBase @event) 
