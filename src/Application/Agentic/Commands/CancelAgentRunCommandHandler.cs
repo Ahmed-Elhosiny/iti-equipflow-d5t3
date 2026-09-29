@@ -8,7 +8,7 @@ public sealed class CancelAgentRunCommandHandler(IActiveRunRegistry registry)
 {
     public Task<bool> Handle(CancelAgentRunCommand request, CancellationToken cancellationToken)
     {
-        var cancelled = registry.TryCancel(request.RunId);
+        var cancelled = registry.TryCancel(request.RunId, request.UserId);
         return Task.FromResult(cancelled);
     }
 }

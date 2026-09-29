@@ -2,7 +2,7 @@ namespace EquipFlow.Application.Agentic.Abstractions;
 
 public interface IActiveRunRegistry
 {
-    void Register(Guid runId, CancellationTokenSource cts);
+    void Register(Guid runId, string userId, CancellationTokenSource cts);
     void Unregister(Guid runId);
-    bool TryCancel(Guid runId);
+    bool TryCancel(Guid runId, string userId);
 }
