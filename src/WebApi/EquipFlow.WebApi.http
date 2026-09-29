@@ -1,6 +1,323 @@
-@EquipFlow.WebApi_HostAddress = http://localhost:5036
+@host = http://localhost:5036
+@tech_token = 
+@supervisor_token = 
+@manager_token = 
 
-GET {{EquipFlow.WebApi_HostAddress}}/weatherforecast/
+### =====================================================================
+### 1. HEALTH CHECKS (No Auth Required)
+### =====================================================================
+
+GET {{host}}/health/live
 Accept: application/json
 
 ###
+
+GET {{host}}/health/ready
+Accept: application/json
+
+###
+
+GET {{host}}/health
+Accept: application/json
+
+### =====================================================================
+### 2. AUTHENTICATION (Get JWT Tokens)
+### =====================================================================
+
+# @name loginTechnician
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "technician",
+  "password": "password"
+}
+
+
+
+###
+
+# @name loginSupervisor
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "supervisor",
+  "password": "password"
+}
+
+
+
+###
+
+# @name loginManager
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "manager",
+  "password": "password"
+}
+
+
+
+### =====================================================================
+### 3. EQUIPMENT & MAINTENANCE (Technician/Engineer)
+### =====================================================================
+
+GET {{host}}/api/equipment
+Authorization: Bearer {{tech_token}}
+X-Correlation-Id: {{$guid}}
+
+###
+
+GET {{host}}/api/equipment/00000000-0000-0000-0000-000000000001
+Authorization: Bearer {{tech_token}}
+X-Correlation-Id: {{$guid}}
+
+###
+
+GET {{host}}/api/equipment/00000000-0000-0000-0000-000000000001/maintenance
+Authorization: Bearer {{tech_token}}
+X-Correlation-Id: {{$guid}}
+
+### =====================================================================
+### 4. DOCUMENTS & SEARCH (Manager for upload, Anyone for search)
+### =====================================================================
+
+GET {{host}}/api/documents
+Authorization: Bearer {{tech_token}}
+X-Correlation-Id: {{$guid}}
+
+###
+# Note: Requires a real file named 'test.pdf' in the same directory as this .http file
+POST {{host}}/api/documents
+Authorization: Bearer {{manager_token}}
+X-Correlation-Id: {{$guid}}
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="file"; filename="test.pdf"
+Content-Type: application/pdf
+
+< ./test.pdf
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="type"
+
+Manual
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="source"
+
+EquipTech
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="section"
+
+Pumps
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="version"
+
+1.0
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="format"
+
+PDF
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+###
+
+POST {{host}}/api/search
+Authorization: Bearer {{tech_token}}
+Content-Type: application/json
+
+{
+  "queryText": "How to fix pump overheating?",
+  "topK": 5
+}
+
+### =====================================================================
+### 5. AI & CHAT (Orchestrator)
+### =====================================================================
+
+POST {{host}}/api/chat
+Authorization: Bearer {{tech_token}}
+X-Correlation-Id: {{$guid}}
+Content-Type: application/json
+
+{
+  "message": "Why is P-101 overheating?",
+  "stream": true
+}
+
+###
+
+POST {{host}}/api/ai/analyze
+Authorization: Bearer {{tech_token}}
+X-Correlation-Id: {{$guid}}
+Content-Type: application/json
+
+{
+  "symptomDescription": "P-101 is making a grinding noise and overheating",
+  "equipmentIdHint": "00000000-0000-0000-0000-000000000001"
+}
+
+### =====================================================================
+### 6. CONVERSATIONS
+### =====================================================================
+
+GET {{host}}/api/conversations
+Authorization: Bearer {{tech_token}}
+
+###
+
+POST {{host}}/api/conversations
+Authorization: Bearer {{tech_token}}
+Content-Type: application/json
+
+{
+  "title": "P-101 Overheating Investigation"
+}
+
+###
+
+GET {{host}}/api/conversations/00000000-0000-0000-0000-000000000001
+Authorization: Bearer {{tech_token}}
+
+### =====================================================================
+### 7. WORK ORDERS (D5 Workflow)
+### =====================================================================
+
+GET {{host}}/api/workorders
+Authorization: Bearer {{tech_token}}
+
+###
+
+POST {{host}}/api/workorders
+Authorization: Bearer {{tech_token}}
+X-Correlation-Id: {{$guid}}
+Content-Type: application/json
+
+{
+  "title": "Fix P-101 Overheating",
+  "symptom": "Overheating and grinding noise",
+  "equipmentName": "Pump P-101",
+  "equipmentAssetNumber": "P-101",
+  "location": "Line 1"
+}
+
+###
+
+GET {{host}}/api/workorders/00000000-0000-0000-0000-000000000001
+Authorization: Bearer {{tech_token}}
+X-Correlation-Id: {{$guid}}
+
+###
+
+POST {{host}}/api/workorders/00000000-0000-0000-0000-000000000001/safety
+Authorization: Bearer {{tech_token}}
+X-Correlation-Id: {{$guid}}
+Content-Type: application/json
+
+{
+  "description": "Lockout/Tagout",
+  "isMandatory": true,
+  "sortOrder": 1
+}
+
+###
+
+POST {{host}}/api/workorders/00000000-0000-0000-0000-000000000001/safety/00000000-0000-0000-0000-000000000001/complete
+Authorization: Bearer {{tech_token}}
+X-Correlation-Id: {{$guid}}
+Content-Type: application/json
+
+{
+  "completionNote": "LOTO applied successfully"
+}
+
+###
+
+POST {{host}}/api/workorders/00000000-0000-0000-0000-000000000001/submit
+Authorization: Bearer {{tech_token}}
+X-Correlation-Id: {{$guid}}
+
+### =====================================================================
+### 8. SUPERVISOR APPROVAL GATE (Role: Supervisor)
+### =====================================================================
+
+GET {{host}}/api/workorders/pending-approvals
+Authorization: Bearer {{supervisor_token}}
+
+###
+
+POST {{host}}/api/workorders/00000000-0000-0000-0000-000000000001/approve
+Authorization: Bearer {{supervisor_token}}
+X-Correlation-Id: {{$guid}}
+Content-Type: application/json
+
+{
+  "comment": "Looks good, proceed."
+}
+
+###
+
+POST {{host}}/api/workorders/00000000-0000-0000-0000-000000000001/reject
+Authorization: Bearer {{supervisor_token}}
+X-Correlation-Id: {{$guid}}
+Content-Type: application/json
+
+{
+  "comment": "Missing safety checks."
+}
+
+###
+
+POST {{host}}/api/workorders/00000000-0000-0000-0000-000000000001/edit-and-approve
+Authorization: Bearer {{supervisor_token}}
+X-Correlation-Id: {{$guid}}
+Content-Type: application/json
+
+{
+  "comment": "Adjusted priority.",
+  "title": "Urgent: Fix P-101 Overheating"
+}
+
+###
+
+POST {{host}}/api/workorders/00000000-0000-0000-0000-000000000001/dispatch
+Authorization: Bearer {{supervisor_token}}
+X-Correlation-Id: {{$guid}}
+
+### =====================================================================
+### 9. COST GOVERNOR (T3 Twist)
+### =====================================================================
+
+GET {{host}}/api/budget/me
+Authorization: Bearer {{tech_token}}
+
+###
+
+GET {{host}}/api/budgets/me
+Authorization: Bearer {{tech_token}}
+
+###
+
+GET {{host}}/api/cost/spend
+Authorization: Bearer {{tech_token}}
+
+###
+
+GET {{host}}/api/budgets
+Authorization: Bearer {{manager_token}}
+
+### =====================================================================
+### 10. OBSERVABILITY
+### =====================================================================
+
+GET {{host}}/api/runs/00000000-0000-0000-0000-000000000001
+Authorization: Bearer {{tech_token}}
+
+###
+
+POST {{host}}/api/runs/00000000-0000-0000-0000-000000000001/cancel
+Authorization: Bearer {{tech_token}}
+
