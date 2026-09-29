@@ -27,7 +27,7 @@ EquipFlow is designed with a "Defense in Depth" strategy, addressing both tradit
 
 ### 2.4 Security Misconfiguration
 - **Environment Variables:** `.env.example` is provided with safe placeholders. No real secrets are committed.
-- **CORS:** Configured explicitly in the Web API to allow only trusted origins.
+- **CORS:** Cross-Origin Resource Sharing (CORS) is intentionally **not configured** by default. The API relies on the browser's strict same-origin policy, which securely prevents unauthorized cross-origin web clients from accessing the API. If a specific web frontend is deployed, a strict, origin-restricted CORS policy must be explicitly added via environment configuration.
 - **Health Endpoints:** `/health` and `/ready` are exposed for infrastructure monitoring but do not leak sensitive internal state.
 
 ---
