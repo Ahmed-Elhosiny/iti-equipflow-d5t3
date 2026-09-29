@@ -7,11 +7,11 @@ info:
     the structural safety gate, Supervisor approval (incl. edit-and-approve),
     the gated dispatch write tool, the T3 Cost Governor spend view, and observability.
     Every response carries `X-Correlation-Id` (OBS-001).
-  version: 1.0.0
+  version: 1.1.0
   contact:
     name: EquipTech Manufacturing
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:5000
     description: Local development (docker compose up)
 
 tags:
@@ -19,8 +19,13 @@ tags:
   - name: Equipment
   - name: Maintenance
   - name: Documents
+  - name: Search
   - name: Chat
     description: Conversational AI entry point (Orchestrator)
+  - name: AI
+    description: Full D5 Agentic Workflow
+  - name: Conversations
+    description: Session history (FR-007)
   - name: WorkOrders
     description: D5 workflow, safety gate, approval gate, dispatch
   - name: CostGovernor
@@ -73,14 +78,17 @@ paths:
                 items: { $ref: '#/components/schemas/Equipment' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
-  /api/equipment/{equipmentId}:
+  /api/equipment/{id}:
     get:
       tags: [Equipment]
       summary: Get equipment details (FR-005)
       operationId: getEquipment
       parameters:
         - { $ref: '#/components/parameters/CorrelationId' }
-        - { $ref: '#/components/parameters/EquipmentId' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
       responses:
         '200':
           description: Equipment details
@@ -90,14 +98,17 @@ paths:
               schema: { $ref: '#/components/schemas/Equipment' }
         '404': { $ref: '#/components/responses/NotFound' }
 
-  /api/equipment/{equipmentId}/maintenance:
+  /api/equipment/{id}/maintenance:
     get:
       tags: [Maintenance]
       summary: Retrieve authorised maintenance history (FR-006, TL-002)
       operationId: getMaintenanceHistory
       parameters:
         - { $ref: '#/components/parameters/CorrelationId' }
-        - { $ref: '#/components/parameters/EquipmentId' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
       responses:
         '200':
           description: Maintenance events
@@ -112,7 +123,7 @@ paths:
   /api/documents:
     get:
       tags: [Documents]
-      summary: List/search ingested documents (Manager role)
+      summary: List ingested documents
       operationId: listDocuments
       parameters:
         - { $ref: '#/components/parameters/CorrelationId' }
@@ -125,7 +136,6 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/DocumentMeta' }
-        '403': { $ref: '#/components/responses/Forbidden' }
     post:
       tags: [Documents]
       summary: Upload a document for ingestion (FR-007, Manager role)
@@ -143,11 +153,15 @@ paths:
                   type: string
                   format: binary
                   description: PDF or DOCX
-                metadata:
+                type:
                   type: string
-                  description: JSON metadata (id, type, equipment, line, version)
+                  enum: [Manual, MaintenanceGuide, TroubleshootingGuide, SafetyProcedure, SOP, MaintenanceReport]
+                source: { type: string }
+                section: { type: string }
+                version: { type: string }
+                format: { type: string, enum: [PDF, DOCX] }
       responses:
-        '202':
+        '201':
           description: Ingestion queued (idempotent re-ingestion, FR-010)
           headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
           content:
@@ -155,14 +169,30 @@ paths:
               schema: { $ref: '#/components/schemas/IngestionStatus' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /api/search:
+    post:
+      tags: [Search]
+      summary: Search maintenance knowledge base using hybrid retrieval (ADR-005)
+      operationId: searchDocuments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SearchRequest' }
+      responses:
+        '200':
+          description: Search results with citations or structured refusal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SearchResult' }
+
   /api/chat:
     post:
       tags: [Chat]
       summary: |
         Conversational AI entry point (Orchestrator).
         Returns Server-Sent Events (SSE) with token-level streaming and live
-        agent progress events (NFR-003). Closing the connection requests
-        server-side cancellation (NFR-004).
+        agent progress events (NFR-003).
       operationId: chat
       parameters:
         - { $ref: '#/components/parameters/CorrelationId' }
@@ -179,21 +209,102 @@ paths:
             text/event-stream:
               schema:
                 type: string
-                description: |
-                  Stream of events: `agent.started`, `agent.completed`,
-                  `tool.invoked`, `token`, `citation`, `done`, `budget.exhausted`,
-                  `refusal`. Each event is a JSON `ChatStreamEvent`.
         '402':
           description: Budget exhausted — hard cut-off (CG-004, CG-009)
-          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/BudgetExhaustedResponse' }
+              schema: { $ref: '#/components/schemas/BudgetRefusalDto' }
+
+  /api/ai/analyze:
+    post:
+      tags: [AI]
+      summary: Run the full D5 maintenance analysis workflow (FR-021...FR-024)
+      operationId: analyzeMaintenance
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnalyzeMaintenanceRequest' }
+      responses:
+        '200':
+          description: Workflow completed (PendingApproval, PartialSuccess, or Cached)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyzeMaintenanceResponse' }
+        '402':
+          description: Budget exhausted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BudgetRefusalDto' }
+        '422':
+          description: Workflow failed
+
+  /api/conversations:
+    get:
+      tags: [Conversations]
+      summary: Get the authenticated user's conversations (FR-007)
+      operationId: getMyConversations
+      responses:
+        '200':
+          description: Conversations list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ConversationSummary' }
+    post:
+      tags: [Conversations]
+      summary: Start a new conversation
+      operationId: startConversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StartConversationRequest' }
+      responses:
+        '201':
+          description: Conversation created
+
+  /api/conversations/{id}:
+    get:
+      tags: [Conversations]
+      summary: Get a specific conversation with its messages
+      operationId: getConversationById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Conversation details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Conversation' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /api/workorders:
+    get:
+      tags: [WorkOrders]
+      summary: Get the authenticated user's work orders
+      operationId: getWorkOrdersByUser
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/WorkOrderStatus' }
+      responses:
+        '200':
+          description: Work orders list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WorkOrder' }
     post:
       tags: [WorkOrders]
-      summary: Create a draft work order (Arch §4.1)
+      summary: Create a draft work order
       operationId: createWorkOrder
       parameters:
         - { $ref: '#/components/parameters/CorrelationId' }
@@ -205,204 +316,247 @@ paths:
       responses:
         '201':
           description: Draft created
-          headers:
-            X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' }
-            Location:
-              schema: { type: string }
-              description: URL of the created work order
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/WorkOrder' }
+              schema: { type: string, format: uuid }
 
-  /api/workorders/{workOrderId}:
+  /api/workorders/pending-approvals:
+    get:
+      tags: [WorkOrders]
+      summary: Get work orders pending supervisor approval
+      operationId: getPendingWorkOrderApprovals
+      security:
+        - bearerAuth: [Supervisor]
+      responses:
+        '200':
+          description: Pending work orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WorkOrder' }
+
+  /api/workorders/{id}:
     get:
       tags: [WorkOrders]
       summary: Get a work order (FR-003 object-level auth)
       operationId: getWorkOrder
       parameters:
         - { $ref: '#/components/parameters/CorrelationId' }
-        - { $ref: '#/components/parameters/WorkOrderId' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
       responses:
         '200':
           description: Work order
-          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkOrder' }
         '404': { $ref: '#/components/responses/NotFound' }
 
-  /api/workorders/{workOrderId}/safety:
+  /api/workorders/{id}/safety:
     post:
       tags: [WorkOrders]
-      summary: Add a safety prerequisite (Arch §4.1)
+      summary: Add a safety prerequisite
       operationId: addSafetyPrerequisite
       parameters:
         - { $ref: '#/components/parameters/CorrelationId' }
-        - { $ref: '#/components/parameters/WorkOrderId' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/AddSafetyPrerequisiteRequest' }
       responses:
-        '200':
-          description: Updated work order
-          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WorkOrder' }
+        '204':
+          description: Prerequisite added
 
-  /api/workorders/{workOrderId}/safety/{prerequisiteId}/complete:
+  /api/workorders/{id}/safety/{pid}/complete:
     post:
       tags: [WorkOrders]
       summary: Mark a safety prerequisite resolved
       operationId: completeSafetyPrerequisite
       parameters:
         - { $ref: '#/components/parameters/CorrelationId' }
-        - { $ref: '#/components/parameters/WorkOrderId' }
-        - name: prerequisiteId
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: pid
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                completionNote: { type: string, nullable: true }
+      responses:
+        '204':
+          description: Prerequisite marked complete
+
+  /api/workorders/{id}/submit:
+    post:
+      tags: [WorkOrders]
+      summary: Submit for Supervisor approval (FR-025)
+      operationId: submitWorkOrder
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationId' }
+        - name: id
           in: path
           required: true
           schema: { type: string, format: uuid }
       responses:
-        '200':
-          description: Updated work order
-          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WorkOrder' }
-
-  /api/workorders/{workOrderId}/submit:
-    post:
-      tags: [WorkOrders]
-      summary: |
-        Submit for Supervisor approval (Arch §4.1, FR-025).
-        Fails if any mandatory safety prerequisite is unresolved (FR-026).
-      operationId: submitWorkOrder
-      parameters:
-        - { $ref: '#/components/parameters/CorrelationId' }
-        - { $ref: '#/components/parameters/WorkOrderId' }
-      responses:
-        '200':
+        '204':
           description: Transitioned to PendingApproval
-          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WorkOrder' }
         '409':
           description: Unresolved mandatory safety prerequisite blocks submission (FR-026)
-          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
-          content:
-            application/problem+json:
-              schema: { $ref: '#/components/schemas/ApiError' }
 
-  /api/workorders/{workOrderId}/approve:
+  /api/workorders/{id}/approve:
     post:
       tags: [WorkOrders]
-      summary: |
-        Supervisor approves (FR-027). Supports edit-and-approve (FR-029) by
-        including an `edits` object; any edit is audited and cannot bypass
-        unresolved safety prerequisites.
+      summary: Supervisor approves (FR-027)
       operationId: approveWorkOrder
       security:
         - bearerAuth: [Supervisor]
       parameters:
         - { $ref: '#/components/parameters/CorrelationId' }
-        - { $ref: '#/components/parameters/WorkOrderId' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
       requestBody:
         required: false
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ApproveRequest' }
+            schema: { $ref: '#/components/schemas/WorkOrderDecisionRequest' }
       responses:
-        '200':
+        '204':
           description: Approved (audited, FR-028)
-          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WorkOrder' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '409':
-          description: Unresolved mandatory safety prerequisite blocks approval
-          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
-          content:
-            application/problem+json:
-              schema: { $ref: '#/components/schemas/ApiError' }
 
-  /api/workorders/{workOrderId}/reject:
+  /api/workorders/{id}/reject:
     post:
       tags: [WorkOrders]
-      summary: Supervisor rejects (FR-027, audited FR-028)
+      summary: Supervisor reject (FR-027, audited FR-028)
       operationId: rejectWorkOrder
       security:
         - bearerAuth: [Supervisor]
       parameters:
         - { $ref: '#/components/parameters/CorrelationId' }
-        - { $ref: '#/components/parameters/WorkOrderId' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/RejectRequest' }
+            schema: { $ref: '#/components/schemas/WorkOrderDecisionRequest' }
       responses:
-        '200':
+        '204':
           description: Rejected
-          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WorkOrder' }
-        '403': { $ref: '#/components/responses/Forbidden' }
 
-  /api/workorders/{workOrderId}/dispatch:
+  /api/workorders/{id}/edit-and-approve:
     post:
       tags: [WorkOrders]
-      summary: |
-        Authorise dispatch — the gated write/side-effecting tool (FR-019, TL-005).
-        Only executes when the work order is Approved AND all mandatory safety
-        prerequisites are resolved (structurally enforced, FR-026/BR-005).
+      summary: Edit permitted fields and approve a work order (FR-029)
+      operationId: editAndApproveWorkOrder
+      security:
+        - bearerAuth: [Supervisor]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationId' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkOrderEditAndApproveRequest' }
+      responses:
+        '204':
+          description: Edited and approved
+
+  /api/workorders/{id}/dispatch:
+    post:
+      tags: [WorkOrders]
+      summary: Authorise dispatch — the gated write tool (FR-019, TL-005)
       operationId: dispatchWorkOrder
       security:
         - bearerAuth: [Supervisor]
       parameters:
         - { $ref: '#/components/parameters/CorrelationId' }
-        - { $ref: '#/components/parameters/WorkOrderId' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Dispatch authorised (Approved → Dispatched)
+        '409':
+          description: Preconditions not met
+
+  /api/budget/me:
+    get:
+      tags: [CostGovernor]
+      summary: Get the authenticated user's budget
+      operationId: getMyBudget
       responses:
         '200':
-          description: Dispatch authorised (Approved → Dispatched)
-          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          description: Budget details
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/WorkOrder' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '409':
-          description: Preconditions not met (not approved or safety unresolved)
-          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+              schema: { $ref: '#/components/schemas/BudgetSummary' }
+
+  /api/budgets/me:
+    get:
+      tags: [CostGovernor]
+      summary: Get the authenticated user's budget (Legacy)
+      operationId: getMyBudgetLegacy
+      responses:
+        '200':
+          description: Budget details
           content:
-            application/problem+json:
-              schema: { $ref: '#/components/schemas/ApiError' }
+            application/json:
+              schema: { $ref: '#/components/schemas/BudgetSummary' }
+
+  /api/budgets:
+    get:
+      tags: [CostGovernor]
+      summary: Get all user budgets (Manager only)
+      operationId: getAllBudgets
+      security:
+        - bearerAuth: [Manager]
+      responses:
+        '200':
+          description: All budgets
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/BudgetSummary' }
 
   /api/cost/spend:
     get:
       tags: [CostGovernor]
-      summary: |
-        Spend view (CG-008). Technicians/Engineers see own spend;
-        Managers/Supervisors may see all (object-level auth, FR-003).
+      summary: Spend view (CG-008)
       operationId: getSpend
-      parameters:
-        - { $ref: '#/components/parameters/CorrelationId' }
-        - name: userId
-          in: query
-          required: false
-          schema: { type: string }
-          description: Omit for own spend; requires elevated role for others.
       responses:
         '200':
           description: Spend view
-          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SpendView' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/UsageRecord' }
 
   /api/runs/{runId}:
     get:
@@ -410,7 +564,6 @@ paths:
       summary: Inspect an agent run step-by-step (NFR-002, OBS-002)
       operationId: getRunTrace
       parameters:
-        - { $ref: '#/components/parameters/CorrelationId' }
         - name: runId
           in: path
           required: true
@@ -418,7 +571,6 @@ paths:
       responses:
         '200':
           description: Run trace
-          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RunTrace' }
@@ -430,20 +582,20 @@ paths:
       summary: Cancel a running agent run (NFR-004)
       operationId: cancelRun
       parameters:
-        - { $ref: '#/components/parameters/CorrelationId' }
         - name: runId
           in: path
           required: true
           schema: { type: string, format: uuid }
       responses:
-        '202':
+        '204':
           description: Cancellation requested
-          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+        '404':
+          description: Run not found or not owned by user
 
   /health:
     get:
       tags: [Health]
-      summary: Liveness probe (NFR-010)
+      summary: Full health check
       security: []
       operationId: health
       responses:
@@ -459,15 +611,22 @@ paths:
         '200': { description: Ready }
         '503': { description: Not ready }
 
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      operationId: liveness
+      responses:
+        '200': { description: Alive }
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: |
-        JWT bearer. Roles: Technician, Engineer, Manager, Supervisor.
-        Role claims enforced server-side (FR-002).
+      description: "JWT bearer. Roles: Technician, Engineer, Manager, Supervisor."
 
   parameters:
     CorrelationId:
@@ -475,55 +634,20 @@ components:
       in: header
       required: false
       schema: { type: string }
-      description: Optional client-supplied correlation id; echoed in response.
-    EquipmentId:
-      name: equipmentId
-      in: path
-      required: true
-      schema: { type: string }
-    WorkOrderId:
-      name: workOrderId
-      in: path
-      required: true
-      schema: { type: string, format: uuid }
 
   headers:
     CorrelationId:
       schema: { type: string }
-      description: Correlation id propagated across orchestrator/agents/tools/LLM (OBS-001).
 
   responses:
     Unauthorized:
-      description: Missing or invalid credentials (FR-001)
-      content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/ApiError' }
+      description: Missing or invalid credentials
     Forbidden:
-      description: Authenticated but not permitted (FR-002/FR-003)
-      content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/ApiError' }
+      description: Authenticated but not permitted
     NotFound:
       description: Resource not found or not accessible
-      content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/ApiError' }
 
   schemas:
-    ApiError:
-      type: object
-      description: RFC 7807 ProblemDetails
-      properties:
-        type: { type: string }
-        title: { type: string }
-        status: { type: integer }
-        detail: { type: string }
-        instance: { type: string }
-        correlationId: { type: string }
-        errorCode:
-          type: string
-          description: Domain error code (e.g., SAFETY_PREREQ_UNRESOLVED, BUDGET_EXHAUSTED)
-
     LoginRequest:
       type: object
       required: [username, password]
@@ -534,89 +658,135 @@ components:
     TokenResponse:
       type: object
       properties:
-        accessToken: { type: string }
-        expiresIn: { type: integer }
-        role:
-          type: string
-          enum: [Technician, Engineer, Manager, Supervisor]
+        token: { type: string }
+        expiresAt: { type: string, format: date-time }
 
     Equipment:
       type: object
       properties:
-        id: { type: string }
+        id: { type: string, format: uuid }
         name: { type: string }
-        type:
-          type: string
-          enum: [Pump, Motor, Compressor, Conveyor]
-        productionLineId: { type: string }
-        manualRevision: { type: string }
+        serialNumber: { type: string, nullable: true }
+        line: { type: string, nullable: true }
 
     MaintenanceEvent:
       type: object
       properties:
         id: { type: string, format: uuid }
-        equipmentId: { type: string }
         occurredAt: { type: string, format: date-time }
-        type: { type: string }
-        summary: { type: string }
+        description: { type: string }
 
     DocumentMeta:
       type: object
       properties:
-        id: { type: string }
+        id: { type: string, format: uuid }
         title: { type: string }
-        type:
-          type: string
-          enum: [Manual, MaintenanceGuide, TroubleshootingGuide, SafetyProcedure, SOP, MaintenanceReport]
-        equipmentId: { type: string, nullable: true }
-        lineId: { type: string, nullable: true }
-        version: { type: string }
-        format: { type: string, enum: [PDF, DOCX] }
-        status: { type: string, enum: [Pending, Ingested, Failed] }
+        type: { type: string }
+        status: { type: string }
+        uploadedAt: { type: string, format: date-time }
 
     IngestionStatus:
       type: object
       properties:
-        documentId: { type: string }
-        status: { type: string }
+        id: { type: string, format: uuid }
+
+    SearchRequest:
+      type: object
+      required: [queryText]
+      properties:
+        queryText: { type: string }
+        topK: { type: integer, default: 10 }
+        equipmentId: { type: string, nullable: true }
+        productionLine: { type: string, nullable: true }
+        documentType: { type: string, nullable: true }
+        documentVersion: { type: string, nullable: true }
+
+    SearchResult:
+      type: object
+      properties:
+        isRefusal: { type: boolean }
+        refusalReason: { type: string, nullable: true }
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              documentId: { type: string, format: uuid }
+              chunkId: { type: string, format: uuid }
+              content: { type: string }
+              score: { type: number }
 
     ChatRequest:
       type: object
       required: [message]
       properties:
         message: { type: string }
-        conversationId:
-          type: string
-          format: uuid
-          nullable: true
-          description: Omit to start a new conversation (NFR-009 session history).
-        equipmentContext:
-          type: string
-          nullable: true
-          description: Optional equipment id for metadata filtering (FR-013).
-        stream:
-          type: boolean
-          default: true
+        conversationId: { type: string, format: uuid, nullable: true }
+        equipmentContext: { type: string, nullable: true }
+        stream: { type: boolean, default: true }
 
-    ChatStreamEvent:
+    AnalyzeMaintenanceRequest:
       type: object
-      description: One SSE event payload
+      required: [symptomDescription]
       properties:
-        eventType:
-          type: string
-          enum: [agent.started, agent.completed, tool.invoked, token, citation, budget.exhausted, refusal, done]
-        runId: { type: string, format: uuid }
-        agentId: { type: string, nullable: true }
-        data:
-          type: object
-          additionalProperties: true
-        citations:
+        symptomDescription: { type: string }
+        equipmentIdHint: { type: string, nullable: true }
+
+    AnalyzeMaintenanceResponse:
+      type: object
+      properties:
+        status: { type: string }
+        draft: { $ref: '#/components/schemas/WorkOrderOutput' }
+        diagnosticPlan: { $ref: '#/components/schemas/DiagnosticPlanOutput' }
+        errorMessage: { type: string, nullable: true }
+        reasonCode: { type: string, nullable: true }
+        estimatedCost: { type: number, nullable: true }
+        remainingBudget: { type: number, nullable: true }
+        cachedResponse: { type: string, nullable: true }
+        fallbackCitations:
           type: array
           items: { $ref: '#/components/schemas/Citation' }
 
+    WorkOrderOutput:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: string }
+        requiredParts: { type: array, items: { type: string } }
+        priority: { type: string }
+        workOrderId: { type: string, format: uuid, nullable: true }
+        summary: { type: string, nullable: true }
+        estimatedCost: { type: number }
+
+    DiagnosticPlanOutput:
+      type: object
+      properties:
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              description: { type: string }
+              evidenceChunkId: { type: string, nullable: true }
+        safetyPrerequisites:
+          type: array
+          items:
+            type: object
+            properties:
+              description: { type: string }
+              isMandatory: { type: boolean }
+        reasoning: { type: string }
+
+    BudgetRefusalDto:
+      type: object
+      properties:
+        type: { type: string }
+        remaining_budget_usd: { type: number }
+        estimated_cost_usd: { type: number }
+        options: { type: array, items: { type: string } }
+
     Citation:
       type: object
-      description: Structured citation traceable to exact chunk (FR-015)
       properties:
         documentId: { type: string }
         chunkId: { type: string }
@@ -624,152 +794,113 @@ components:
         page: { type: integer, nullable: true }
         score: { type: number, format: float }
 
-    BudgetExhaustedResponse:
-      type: object
-      description: Structured refusal on budget exhaustion (CG-009, Arch §5.4)
-      properties:
-        status: { type: string, example: budget_exhausted }
-        remaining: { type: string, example: "$0.015" }
-        estimatedCost: { type: string, example: "$0.042" }
-        options:
-          type: array
-          items: { type: string, example: wait_for_reset }
-
-    CreateWorkOrderRequest:
-      type: object
-      required: [equipmentId, title]
-      properties:
-        equipmentId: { type: string }
-        title: { type: string }
-        description: { type: string }
-        runId:
-          type: string
-          format: uuid
-          nullable: true
-          description: Linking agent run that produced this draft (CG-007 attribution).
-
-    AddSafetyPrerequisiteRequest:
-      type: object
-      required: [description, isMandatory]
-      properties:
-        description: { type: string }
-        isMandatory: { type: boolean }
-        sourceDocumentId: { type: string, nullable: true }
-
-    ApproveRequest:
-      type: object
-      properties:
-        comment: { type: string, nullable: true }
-        edits:
-          type: object
-          nullable: true
-          description: Optional field edits for edit-and-approve (FR-029). Audited.
-          properties:
-            title: { type: string, nullable: true }
-            description: { type: string, nullable: true }
-
-    RejectRequest:
-      type: object
-      required: [comment]
-      properties:
-        comment: { type: string }
-
-    WorkOrderStatus:
-      type: string
-      enum: [Draft, PendingApproval, Approved, Rejected, Dispatched]
-
-    SafetyPrerequisite:
+    ConversationSummary:
       type: object
       properties:
         id: { type: string, format: uuid }
+        title: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    Conversation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              role: { type: string }
+              content: { type: string }
+              timestamp: { type: string, format: date-time }
+
+    StartConversationRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+
+    CreateWorkOrderRequest:
+      type: object
+      required: [title, symptom, equipmentName]
+      properties:
+        title: { type: string }
+        symptom: { type: string }
+        equipmentName: { type: string }
+        equipmentAssetNumber: { type: string, nullable: true }
+        manualRevision: { type: string, nullable: true }
+        location: { type: string, nullable: true }
+
+    AddSafetyPrerequisiteRequest:
+      type: object
+      required: [description, isMandatory, sortOrder]
+      properties:
         description: { type: string }
         isMandatory: { type: boolean }
-        isResolved: { type: boolean }
-        sourceDocumentId: { type: string, nullable: true }
+        sortOrder: { type: integer }
+
+    WorkOrderDecisionRequest:
+      type: object
+      properties:
+        comment: { type: string, nullable: true }
+
+    WorkOrderEditAndApproveRequest:
+      type: object
+      properties:
+        comment: { type: string, nullable: true }
+        title: { type: string, nullable: true }
+        symptom: { type: string, nullable: true }
+        equipmentName: { type: string, nullable: true }
+        equipmentAssetNumber: { type: string, nullable: true }
+        manualRevision: { type: string, nullable: true }
+        location: { type: string, nullable: true }
+
+    WorkOrderStatus:
+      type: string
+      enum: [Draft, Submitted, Approved, Rejected, Dispatched]
 
     WorkOrder:
       type: object
       properties:
         id: { type: string, format: uuid }
-        equipmentId: { type: string }
         title: { type: string }
-        description: { type: string }
+        symptom: { type: string }
+        equipmentName: { type: string }
         status: { $ref: '#/components/schemas/WorkOrderStatus' }
-        safetyPrerequisites:
-          type: array
-          items: { $ref: '#/components/schemas/SafetyPrerequisite' }
-        runId: { type: string, format: uuid, nullable: true }
         createdBy: { type: string }
-        createdAt: { type: string, format: date-time }
-        approvalActions:
-          type: array
-          items: { $ref: '#/components/schemas/ApprovalAction' }
 
-    ApprovalAction:
+    BudgetSummary:
       type: object
-      description: Audited approval-gate action (FR-028)
       properties:
-        id: { type: string, format: uuid }
-        actorId: { type: string }
-        action:
-          type: string
-          enum: [Approve, Reject, EditAndApprove]
-        comment: { type: string, nullable: true }
-        runId: { type: string, format: uuid, nullable: true }
-        timestamp: { type: string, format: date-time }
-
-    SpendView:
-      type: object
-      description: Cost Governor spend view (CG-008)
-      properties:
-        userId: { type: string }
-        budgetUsd: { type: number, format: double }
-        usedUsd: { type: number, format: double }
-        remainingUsd: { type: number, format: double }
-        history:
-          type: array
-          items: { $ref: '#/components/schemas/UsageRecord' }
+        userId: { type: string, format: uuid }
+        totalLimit: { type: number }
+        consumedAmount: { type: number }
+        remainingBudget: { type: number }
+        nextResetDate: { type: string, format: date-time }
 
     UsageRecord:
       type: object
-      description: Actual usage accounting (CG-006) attributed to run/agent (CG-007)
       properties:
         runId: { type: string, format: uuid }
-        agentId: { type: string, nullable: true }
         modelId: { type: string }
         promptTokens: { type: integer }
         completionTokens: { type: integer }
-        costUsd: { type: number, format: double }
+        costUsd: { type: number }
         timestamp: { type: string, format: date-time }
 
     RunTrace:
       type: object
-      description: Step-by-step inspectable run (NFR-002, OBS-002)
       properties:
-        runId: { type: string, format: uuid }
-        correlationId: { type: string }
-        status: { type: string, enum: [Running, Completed, Failed, Cancelled, BudgetExhausted] }
-        steps:
-          type: array
-          items: { $ref: '#/components/schemas/RunStep' }
-        totalTokens: { type: integer }
-        totalCostUsd: { type: number, format: double }
-
-    RunStep:
-      type: object
-      properties:
-        agentId: { type: string }
+        correlationId: { type: string, format: uuid }
+        status: { type: string }
         startedAt: { type: string, format: date-time }
-        completedAt: { type: string, format: date-time, nullable: true }
-        toolCalls:
+        events:
           type: array
           items:
             type: object
             properties:
-              toolName: { type: string }
-              durationMs: { type: integer }
-        citations:
-          type: array
-          items: { $ref: '#/components/schemas/Citation' }
-        tokensUsed: { type: integer }
-        modelId: { type: string }
+              eventType: { type: string }
+              timestamp: { type: string, format: date-time }
+              payload: { type: object }
