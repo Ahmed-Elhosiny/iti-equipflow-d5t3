@@ -167,7 +167,7 @@ public sealed class SymptomMatcherAgent(
             ManualRevision = string.IsNullOrWhiteSpace(output.ManualRevision)
                 ? "unknown"
                 : output.ManualRevision,
-            MatchedSymptoms = output.MatchedSymptoms.Count == 0
+            MatchedSymptoms = output.MatchedSymptoms is null || output.MatchedSymptoms.Count == 0
                 ? [input.SymptomDescription]
                 : output.MatchedSymptoms
         };
