@@ -237,7 +237,9 @@ public sealed class SequentialSupervisorOrchestrator(
         try
         {
             var searchResult = await sender.Send(new SearchDocumentsQuery(symptomDescription, TopK: 5), cancellationToken);
-            if (searchResult.IsRefusal || searchResult.Results.Count == 0)
+            
+            // Hardened against null Results collection when IsRefusal is true or search fails
+            if (searchResult.IsRefusal || searchResult.Results is null || searchResult.Results.Count == 0)
             {
                 logger.LogWarning("RAG fallback failed or found no relevant documents: {Reason}", searchResult.RefusalReason);
                 return null;

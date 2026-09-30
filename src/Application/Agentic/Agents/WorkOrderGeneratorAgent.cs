@@ -190,12 +190,15 @@ public sealed class WorkOrderGeneratorAgent(
             {
                 WorkOrderId = draftedWorkOrderId, 
                 Summary = string.IsNullOrWhiteSpace(output!.Summary)
-                    ? output.Description
+                    ? (output.Description ?? string.Empty)
                     : output.Summary,
                 EstimatedCost = output.EstimatedCost == 0 && draftCall is not null
                     ? ReadEstimatedCost(draftCall.ArgumentsJson)
                     : output.EstimatedCost,
-                RequiredParts = output.RequiredParts ?? []
+                RequiredParts = output.RequiredParts ?? [],
+                Title = output.Title ?? "Draft Work Order",
+                Description = output.Description ?? string.Empty,
+                Priority = output.Priority ?? "Medium"
             },
             []);
     }

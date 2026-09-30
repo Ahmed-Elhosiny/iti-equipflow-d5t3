@@ -228,6 +228,12 @@ public static class AiEndpoints
         }
         catch (OperationCanceledException)
         {
+            // If the SSE stream has already started (headers sent as 200 OK), we cannot change the HTTP status code.
+            // Returning Results.Empty gracefully closes the connection without throwing an InvalidOperationException.
+            if (httpContext.Response.HasStarted)
+            {
+                return Results.Empty;
+            }
             return Results.StatusCode(StatusCodes.Status499ClientClosedRequest);
         }
         finally
