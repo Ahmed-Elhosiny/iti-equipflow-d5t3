@@ -19,11 +19,11 @@ public class CompleteSafetyPrerequisiteCommandHandler : IRequestHandler<Complete
         if (string.IsNullOrWhiteSpace(command.CompletedBy))
             throw new ArgumentException("CompletedBy cannot be empty.", nameof(command.CompletedBy));
 
-        var workOrder = await _repository.GetByIdAsync(command.WorkOrderId, cancellationToken)
+        var workOrder = await _repository.GetByIdNoTrackingAsync(command.WorkOrderId, cancellationToken)
             ?? throw new WorkOrderNotFoundException(command.WorkOrderId);
 
         workOrder.CompleteSafetyPrerequisite(command.PrerequisiteId, command.CompletedBy, command.CompletionNote);
 
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveStateTransitionAsync(workOrder, cancellationToken);
     }
 }

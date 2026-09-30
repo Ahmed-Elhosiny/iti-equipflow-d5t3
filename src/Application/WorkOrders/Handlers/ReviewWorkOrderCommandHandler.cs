@@ -1,7 +1,6 @@
 using EquipFlow.Application.Common;
 using EquipFlow.Application.WorkOrders.Commands;
 using EquipFlow.Application.WorkOrders.Ports;
-using EquipFlow.Domain.Enums;
 using MediatR;
 
 namespace EquipFlow.Application.WorkOrders.Handlers;
@@ -20,7 +19,7 @@ public class ReviewWorkOrderCommandHandler : IRequestHandler<ReviewWorkOrderComm
         if (string.IsNullOrWhiteSpace(command.ReviewerUserId))
             throw new ArgumentException("ReviewerUserId cannot be empty.", nameof(command.ReviewerUserId));
 
-        var workOrder = await _repository.GetByIdAsync(command.WorkOrderId, cancellationToken)
+        var workOrder = await _repository.GetByIdNoTrackingAsync(command.WorkOrderId, cancellationToken)
             ?? throw new WorkOrderNotFoundException(command.WorkOrderId);
 
         switch (command.Decision)
@@ -46,6 +45,6 @@ public class ReviewWorkOrderCommandHandler : IRequestHandler<ReviewWorkOrderComm
                 throw new ArgumentException($"Unknown decision type: {command.Decision}", nameof(command.Decision));
         }
 
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveStateTransitionAsync(workOrder, cancellationToken);
     }
 }
