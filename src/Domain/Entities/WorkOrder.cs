@@ -33,14 +33,12 @@ public class WorkOrder
     // EF Core parameterless constructor
     private WorkOrder()
     {
-        Id = Guid.Empty;
+        // Let EF Core materialize the properties. 
+        // Initializing to Guid.Empty or MinValue here can interfere with EF Core's change tracking.
         Title = string.Empty;
         Symptom = string.Empty;
         EquipmentName = string.Empty;
         CreatedBy = string.Empty;
-        Status = WorkOrderStatus.Draft;
-        CreatedAtUtc = DateTimeOffset.MinValue;
-        UpdatedAtUtc = DateTimeOffset.MinValue;
     }
 
     public WorkOrder(
@@ -79,7 +77,7 @@ public class WorkOrder
         UpdatedAtUtc = DateTimeOffset.UtcNow;
     }
 
-    private bool CanModifySafetyPrerequisites()
+    public bool CanModifySafetyPrerequisites()
     {
         return Status == WorkOrderStatus.Draft || Status == WorkOrderStatus.Rejected;
     }
@@ -96,7 +94,10 @@ public class WorkOrder
 
         var prerequisite = new SafetyPrerequisite(Id, description, isMandatory, sortOrder);
         _safetyPrerequisites.Add(prerequisite);
-        UpdateTimestamp();
+        
+        // Note: We intentionally do NOT call UpdateTimestamp() here. 
+        // Modifying the parent's timestamp when only a child entity is added causes 
+        // DbUpdateConcurrencyException in EF Core + PostgreSQL due to timestamp precision truncation.
         return prerequisite;
     }
 
@@ -109,7 +110,7 @@ public class WorkOrder
             ?? throw new ArgumentException($"Safety prerequisite with id {prerequisiteId} not found.", nameof(prerequisiteId));
 
         prerequisite.MarkCompleted(completedBy, completionNote);
-        UpdateTimestamp();
+        // Note: Same as above, avoiding parent timestamp update to prevent concurrency exceptions.
     }
 
     public void SubmitForApproval(string submittedBy)
@@ -144,7 +145,7 @@ public class WorkOrder
         UpdateTimestamp();
     }
 
-        public void EditAndApprove(
+    public void EditAndApprove(
         string approverUserId, 
         string? comment,
         string? title,
@@ -160,7 +161,6 @@ public class WorkOrder
         if (HasUnmetMandatorySafetyPrerequisites)
             throw new InvalidOperationException("All mandatory safety prerequisites must be completed before approval.");
 
-        // Track changes for auditability without altering the DB schema
         var changes = new List<string>();
         if (!string.IsNullOrWhiteSpace(title) && title != Title) { Title = title; changes.Add("Title"); }
         if (!string.IsNullOrWhiteSpace(symptom) && symptom != Symptom) { Symptom = symptom; changes.Add("Symptom"); }
@@ -180,6 +180,7 @@ public class WorkOrder
         _approvalActions.Add(new ApprovalAction(Id, Enums.ApprovalActionType.EditedAndApproved, approverUserId, auditComment));
         UpdateTimestamp();
     }
+
     public void Reject(string approverUserId, string? comment = null)
     {
         if (Status != WorkOrderStatus.PendingApproval)
