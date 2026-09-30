@@ -25,7 +25,7 @@ public class FakeWorkOrderRepository : IWorkOrderRepository
     {
         var results = _workOrders.Values
             .Where(wo => wo.EquipmentName == equipmentName)
-            .Select(wo => GetReconstructedWorkOrder(wo.Id)) // Fixed: explicitly pass wo.Id
+            .Select(wo => GetReconstructedWorkOrder(wo.Id))
             .Where(wo => wo != null)
             .Cast<WorkOrder>()
             .ToList();
@@ -40,7 +40,7 @@ public class FakeWorkOrderRepository : IWorkOrderRepository
         if (statusFilter.HasValue)
             workOrders = workOrders.Where(workOrder => workOrder.Status == statusFilter.Value);
             
-        var results = workOrders.Select(wo => GetReconstructedWorkOrder(wo.Id)).Where(wo => wo != null).Cast<WorkOrder>().ToList(); // Fixed
+        var results = workOrders.Select(wo => GetReconstructedWorkOrder(wo.Id)).Where(wo => wo != null).Cast<WorkOrder>().ToList();
         return Task.FromResult<IReadOnlyList<WorkOrder>>(results);
     }
 
@@ -48,7 +48,7 @@ public class FakeWorkOrderRepository : IWorkOrderRepository
     {
         var results = _workOrders.Values
             .Where(workOrder => workOrder.Status == status)
-            .Select(wo => GetReconstructedWorkOrder(wo.Id)) // Fixed
+            .Select(wo => GetReconstructedWorkOrder(wo.Id))
             .Where(wo => wo != null)
             .Cast<WorkOrder>()
             .ToList();
@@ -64,6 +64,13 @@ public class FakeWorkOrderRepository : IWorkOrderRepository
     public Task AddSafetyPrerequisiteAsync(SafetyPrerequisite prerequisite, CancellationToken cancellationToken = default)
     {
         _safetyPrerequisites.Add(prerequisite);
+        return Task.CompletedTask;
+    }
+
+    public Task SaveStateTransitionAsync(WorkOrder workOrder, CancellationToken cancellationToken = default)
+    {
+        _workOrders[workOrder.Id] = workOrder;
+        SaveChangesCalled = true;
         return Task.CompletedTask;
     }
 
@@ -87,9 +94,6 @@ public class FakeWorkOrderRepository : IWorkOrderRepository
         _workOrders.TryGetValue(id, out var workOrder);
         if (workOrder != null)
         {
-            // Use reflection to populate the private _safetyPrerequisites collection.
-            // This simulates EF Core's navigation property population, which is required
-            // because our handler bypasses the entity collection to avoid EF Core concurrency bugs.
             var safetyField = typeof(WorkOrder).GetField("_safetyPrerequisites", BindingFlags.NonPublic | BindingFlags.Instance);
             if (safetyField != null)
             {

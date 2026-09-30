@@ -19,11 +19,11 @@ public class DispatchWorkOrderCommandHandler : IRequestHandler<DispatchWorkOrder
         if (string.IsNullOrWhiteSpace(command.DispatcherUserId))
             throw new ArgumentException("DispatcherUserId cannot be empty.", nameof(command.DispatcherUserId));
 
-        var workOrder = await _repository.GetByIdAsync(command.WorkOrderId, cancellationToken)
+        var workOrder = await _repository.GetByIdNoTrackingAsync(command.WorkOrderId, cancellationToken)
             ?? throw new WorkOrderNotFoundException(command.WorkOrderId);
 
         workOrder.MarkDispatched();
 
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveStateTransitionAsync(workOrder, cancellationToken);
     }
 }
