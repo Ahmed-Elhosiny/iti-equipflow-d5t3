@@ -12,6 +12,8 @@ public sealed class WorkOrderRepository(EquipFlowDbContext context) : IWorkOrder
         CancellationToken cancellationToken = default)
     {
         return await context.WorkOrders
+            .Include(workOrder => workOrder.SafetyPrerequisites)
+            .Include(workOrder => workOrder.ApprovalActions)
             .Where(wo => wo.EquipmentName == equipmentName)
             .OrderByDescending(wo => wo.CreatedAtUtc)
             .ToListAsync(cancellationToken);
@@ -40,6 +42,8 @@ public sealed class WorkOrderRepository(EquipFlowDbContext context) : IWorkOrder
         CancellationToken cancellationToken = default)
     {
         var query = context.WorkOrders
+            .Include(workOrder => workOrder.SafetyPrerequisites)
+            .Include(workOrder => workOrder.ApprovalActions)
             .Where(workOrder => workOrder.CreatedBy == userId.ToString());
 
         if (statusFilter.HasValue)
@@ -56,6 +60,8 @@ public sealed class WorkOrderRepository(EquipFlowDbContext context) : IWorkOrder
         WorkOrderStatus status,
         CancellationToken cancellationToken = default) =>
         await context.WorkOrders
+            .Include(workOrder => workOrder.SafetyPrerequisites)
+            .Include(workOrder => workOrder.ApprovalActions)
             .Where(workOrder => workOrder.Status == status)
             .OrderByDescending(workOrder => workOrder.CreatedAtUtc)
             .ToListAsync(cancellationToken);
