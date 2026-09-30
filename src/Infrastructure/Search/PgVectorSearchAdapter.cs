@@ -95,16 +95,23 @@ public sealed class PgVectorSearchAdapter : IVectorSearchPort
             .ToListAsync(cancellationToken);
 
         return rows
-            .Select(row => new RetrievedChunk(
-                row.ChunkId,
-                row.DocumentId,
-                row.Content,
-                1d - row.Distance,
-                Citation.Create(
+            .Select(row =>
+            {
+                // Cosine distance can be NaN when comparing zero-vectors (e.g., from MockEmbeddingAdapter).
+                // In such cases, the similarity score is effectively 0.0 to prevent ArgumentException downstream.
+                var score = double.IsNaN(row.Distance) ? 0.0 : 1d - row.Distance;
+
+                return new RetrievedChunk(
+                    row.ChunkId,
                     row.DocumentId,
-                    row.DocumentTitle,
-                    row.PageNumber is > 0 ? row.PageNumber : null,
-                    row.Section)))
+                    row.Content,
+                    score,
+                    Citation.Create(
+                        row.DocumentId,
+                        row.DocumentTitle,
+                        row.PageNumber is > 0 ? row.PageNumber : null,
+                        row.Section));
+            })
             .ToList();
     }
 }

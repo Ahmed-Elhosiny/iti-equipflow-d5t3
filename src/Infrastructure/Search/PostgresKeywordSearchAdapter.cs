@@ -37,7 +37,9 @@ public sealed class PostgresKeywordSearchAdapter : IKeywordSearchPort
             documentType = parsedDocumentType;
         }
 
-        var searchQuery = EF.Functions.WebSearchToTsQuery("simple", query.QueryText);
+        // Capture query text locally to ensure it is passed cleanly as a SQL parameter
+        var queryText = query.QueryText;
+
         var candidates = _dbContext.DocumentChunks
             .AsNoTracking()
             .Join(
@@ -72,9 +74,10 @@ public sealed class PostgresKeywordSearchAdapter : IKeywordSearchPort
         }
 
         var rows = await candidates
+            // EF.Functions MUST be inside the expression tree to translate to SQL
             .Where(candidate => EF.Functions
                 .ToTsVector("simple", candidate.Chunk.Content)
-                .Matches(searchQuery))
+                .Matches(EF.Functions.WebSearchToTsQuery("simple", queryText)))
             .Select(candidate => new
             {
                 ChunkId = candidate.Chunk.Id,
@@ -85,7 +88,7 @@ public sealed class PostgresKeywordSearchAdapter : IKeywordSearchPort
                 DocumentTitle = candidate.Document.Title,
                 Rank = EF.Functions
                     .ToTsVector("simple", candidate.Chunk.Content)
-                    .Rank(searchQuery)
+                    .Rank(EF.Functions.WebSearchToTsQuery("simple", queryText))
             })
             .OrderByDescending(row => row.Rank)
             .ThenBy(row => row.ChunkId)
@@ -93,16 +96,22 @@ public sealed class PostgresKeywordSearchAdapter : IKeywordSearchPort
             .ToListAsync(cancellationToken);
 
         return rows
-            .Select(row => new RetrievedChunk(
-                row.ChunkId,
-                row.DocumentId,
-                row.Content,
-                row.Rank,
-                Citation.Create(
+            .Select(row => 
+            {
+                // Ensure rank is finite to satisfy RetrievedChunk constructor guard clauses
+                var score = double.IsNaN(row.Rank) || double.IsInfinity(row.Rank) ? 0.0 : (double)row.Rank;
+                
+                return new RetrievedChunk(
+                    row.ChunkId,
                     row.DocumentId,
-                    row.DocumentTitle,
-                    row.PageNumber is > 0 ? row.PageNumber : null,
-                    row.Section)))
+                    row.Content,
+                    score,
+                    Citation.Create(
+                        row.DocumentId,
+                        row.DocumentTitle,
+                        row.PageNumber is > 0 ? row.PageNumber : null,
+                        row.Section));
+            })
             .ToList();
     }
 }
