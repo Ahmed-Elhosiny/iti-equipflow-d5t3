@@ -151,7 +151,7 @@ builder.Services.AddScoped<IConversationRepository, ConversationRepository>();
 builder.Services.AddScoped<IEquipmentRepository, EquipmentRepository>();
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddScoped<IDocumentChunkRepository, DocumentChunkRepository>();
-builder.Services.AddScoped<ITextChunker, SimpleTextChunker>();
+builder.Services.AddSingleton<ITextChunker, StructureAwareTextChunker>();
 var openAiApiKey = builder.Configuration["Llm:OpenAI:ApiKey"];
 if (string.IsNullOrWhiteSpace(openAiApiKey))
 {

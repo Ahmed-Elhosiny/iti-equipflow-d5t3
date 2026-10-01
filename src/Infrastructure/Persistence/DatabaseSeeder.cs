@@ -133,7 +133,7 @@ public class DatabaseSeeder
         _logger.LogInformation("Seeded 4 User Budgets.");
     }
 
-       private async Task SeedDocumentsAsync(CancellationToken cancellationToken)
+        private async Task SeedDocumentsAsync(CancellationToken cancellationToken)
     {
         if (await _context.Documents.AnyAsync(cancellationToken))
         {
@@ -191,26 +191,31 @@ public class DatabaseSeeder
             document.MarkAsProcessing();
 
             var chunks = _chunker.ChunkText(manual.Content);
-            var embeddings = await _embeddingPort.GenerateEmbeddingsAsync(chunks, cancellationToken);
+            var chunkTexts = chunks.Select(c => c.Text).ToList();
+            var embeddings = await _embeddingPort.GenerateEmbeddingsAsync(chunkTexts, cancellationToken);
 
             for (int i = 0; i < chunks.Count; i++)
             {
-                var tokenCount = chunks[i].Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+                var chunkResult = chunks[i];
+                var tokenCount = chunkResult.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
                 
+                // Use the section extracted by the chunker if available, otherwise fallback to the manual's section
+                var section = chunkResult.Section ?? manual.Section;
+
                 // FIX: Create a DISTINCT metadata instance for the DocumentChunk.
                 // EF Core tracks owned types by reference. Sharing the exact same record instance 
                 // between Document and DocumentChunk causes EF Core to confuse their shadow 
                 // foreign keys (e.g., trying to use DocumentId for the chunk's metadata).
                 var chunkMetadata = new DocumentMetadata(
                     Source: documentMetadata.Source,
-                    Section: documentMetadata.Section,
+                    Section: section,
                     PageNumber: documentMetadata.PageNumber,
                     Version: documentMetadata.Version,
                     Format: documentMetadata.Format);
 
                 var chunk = new DocumentChunk(
                     document.Id,
-                    chunks[i],
+                    chunkResult.Text,
                     chunkMetadata,
                     tokenCount,
                     manual.EquipmentId,
