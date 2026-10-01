@@ -13,12 +13,16 @@ public sealed class OpenAIOptions
 
     public decimal CompletionTokenPricePer1K { get; set; } = 0.0006m;
 
-    public Dictionary<string, (decimal Prompt, decimal Completion)> ModelPricing { get; set; } =
+        public Dictionary<string, (decimal Prompt, decimal Completion)> ModelPricing { get; set; } =
         new(StringComparer.OrdinalIgnoreCase)
         {
             ["gpt-4o-mini"] = (0.00015m, 0.0006m),
             ["gpt-4o"] = (0.0025m, 0.01m),
-            ["gpt-3.5-turbo"] = (0.0005m, 0.0015m)
+            ["gpt-3.5-turbo"] = (0.0005m, 0.0015m),
+            // OpenRouter Free Tier Models (Zero Cost)
+            ["qwen/qwen3-27b:free"] = (0m, 0m),
+            ["deepseek/deepseek-chat-v3-0324:free"] = (0m, 0m),
+            ["minimax/minimax-m3:free"] = (0m, 0m)
         };
 
     // Required for IOptions<T> configuration binding

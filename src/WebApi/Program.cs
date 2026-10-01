@@ -152,15 +152,9 @@ builder.Services.AddScoped<IEquipmentRepository, EquipmentRepository>();
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddScoped<IDocumentChunkRepository, DocumentChunkRepository>();
 builder.Services.AddSingleton<ITextChunker, StructureAwareTextChunker>();
-var openAiApiKey = builder.Configuration["Llm:OpenAI:ApiKey"];
-if (string.IsNullOrWhiteSpace(openAiApiKey))
-{
-    builder.Services.AddSingleton<IEmbeddingPort, MockEmbeddingAdapter>();
-}
-else
-{
-    builder.Services.AddSingleton<IEmbeddingPort, OpenAiEmbeddingAdapter>();
-}
+// OpenRouter (and most free tiers) only support Chat Completions, not Embeddings.
+// We force the MockEmbeddingAdapter for the MVP to prevent 404 crashes during RAG retrieval.
+builder.Services.AddSingleton<IEmbeddingPort, MockEmbeddingAdapter>();
 builder.Services.AddScoped<PdfDocumentExtractor>();
 builder.Services.AddScoped<DocxDocumentExtractor>();
 // Route extraction dynamically according to file extension (FR-1)
@@ -187,7 +181,7 @@ builder.Services.AddSingleton<EquipFlow.Application.Ports.ITokenEstimator, Equip
 
 builder.Services.AddLLMProviders(builder.Configuration);
 
-var primaryProvider = builder.Configuration["Llm:DefaultProvider"] ?? "OpenAI";
+var primaryProvider = builder.Configuration["DefaultLlmProvider"] ?? "OpenAI";
 var fallbackProvider = builder.Configuration["Llm:FallbackProvider"] ?? "Ollama";
 var providerChain = new List<string> { primaryProvider, fallbackProvider };
 
