@@ -20,7 +20,6 @@ public sealed class SequentialSupervisorOrchestrator(
     ILogger<SequentialSupervisorOrchestrator> logger,
     ICachePort? cachePort = null)
 {
-    private const string MockUserId = "00000000-0000-0000-0000-000000000001";
     private static readonly TimeSpan AgentTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan WorkflowTimeout = TimeSpan.FromSeconds(120);
 
@@ -40,9 +39,12 @@ public sealed class SequentialSupervisorOrchestrator(
         string? finalError = null;
         string? outputSummary = null;
 
-        var resolvedUserId = string.IsNullOrWhiteSpace(context.UserId)
-            ? string.IsNullOrWhiteSpace(request.UserId) ? MockUserId : request.UserId
-            : context.UserId;
+        // Resolve the user ID from the context or request, throwing an exception if neither is available.
+        var resolvedUserId = !string.IsNullOrWhiteSpace(context.UserId)
+            ? context.UserId
+            : !string.IsNullOrWhiteSpace(request.UserId)
+                ? request.UserId
+                : throw new InvalidOperationException("User identity is required. Anonymous execution is blocked by the Cost Governor.");
 
         collectedEvents.Add(new AgentRunStarted(
             correlationId,
