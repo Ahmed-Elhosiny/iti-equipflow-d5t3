@@ -131,9 +131,15 @@ async Task AskAsync(string[] args)
                 if (evt.TryGetProperty("eventType", out var type))
                 {
                     var eventType = type.GetString();
-                    if (eventType == "token" && evt.TryGetProperty("data", out var d) && d.TryGetProperty("content", out var c))
+                                        if (eventType == "token" && evt.TryGetProperty("data", out var d) && d.TryGetProperty("content", out var c))
                     {
                         Console.Write(c.GetString());
+                    }
+                    else if (eventType == "refusal" && evt.TryGetProperty("data", out var refData) && refData.TryGetProperty("error", out var err))
+                    {
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine($"\n[Agent Refusal] {err.GetString()}");
+                        Console.ResetColor();
                     }
                     else if (eventType == "done")
                     {
@@ -160,7 +166,34 @@ async Task AnalyzeAsync(string[] args)
     var symptom = string.Join(" ", args.Skip(1));
     var res = await client.PostAsJsonAsync("/api/ai/analyze", new { symptomDescription = symptom });
     
-    if (!res.IsSuccessStatusCode) { Console.WriteLine($"Error: {res.StatusCode}"); return; }
+        if (!res.IsSuccessStatusCode) 
+    { 
+        var errorBody = await res.Content.ReadAsStringAsync();
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"Error: {res.StatusCode}");
+        try 
+        {
+            var errJson = JsonSerializer.Deserialize<JsonElement>(errorBody);
+            if (errJson.TryGetProperty("detail", out var detail)) 
+            {
+                Console.WriteLine($"Detail: {detail.GetString()}");
+            }
+            else if (errJson.TryGetProperty("title", out var title)) 
+            {
+                Console.WriteLine($"Title: {title.GetString()}");
+            }
+            else 
+            {
+                Console.WriteLine(errorBody);
+            }
+        } 
+        catch 
+        {
+            Console.WriteLine(errorBody);
+        }
+        Console.ResetColor();
+        return; 
+    }
     
     var json = await res.Content.ReadAsStringAsync();
     Console.WriteLine(JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(json), jsonOpts));
