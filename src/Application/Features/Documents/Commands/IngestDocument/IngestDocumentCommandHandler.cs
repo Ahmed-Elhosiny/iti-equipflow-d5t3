@@ -60,8 +60,10 @@ public sealed class IngestDocumentCommandHandler
             }
 
             var chunks = _chunker.ChunkText(cleanedText);
+            var chunkTexts = chunks.Select(c => c.Text).ToList();
+
             var embeddings = await _embeddingPort.GenerateEmbeddingsAsync(
-                chunks,
+                chunkTexts,
                 cancellationToken);
 
             if (embeddings.Length != chunks.Count)
@@ -74,11 +76,19 @@ public sealed class IngestDocumentCommandHandler
             var documentChunks = new List<DocumentChunk>(chunks.Count);
             for (var index = 0; index < chunks.Count; index++)
             {
+                var chunkResult = chunks[index];
+                
+                // Inject the extracted section into the chunk's metadata
+                var chunkMetadata = chunkResult.Section is not null 
+                    ? request.Metadata with { Section = chunkResult.Section } 
+                    : request.Metadata;
+
                 var chunk = new DocumentChunk(
                     document.Id,
-                    chunks[index],
-                    request.Metadata,
-                    chunks[index].Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length);
+                    chunkResult.Text,
+                    chunkMetadata,
+                    chunkResult.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length);
+                    
                 chunk.SetEmbedding(embeddings[index]);
                 document.AddChunk(chunk);
                 documentChunks.Add(chunk);

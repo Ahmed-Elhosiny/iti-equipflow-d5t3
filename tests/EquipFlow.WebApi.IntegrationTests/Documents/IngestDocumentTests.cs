@@ -108,7 +108,7 @@ public sealed class DocumentWebApplicationFactory : WebApplicationFactory<Progra
 
             var chunker = Substitute.For<ITextChunker>();
             chunker.ChunkText(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>())
-                .Returns(["dummy text"]);
+                .Returns([new ChunkResult("dummy text", "Dummy Section")]);
 
             var embeddingPort = Substitute.For<IEmbeddingPort>();
             embeddingPort.GenerateEmbeddingsAsync(Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
