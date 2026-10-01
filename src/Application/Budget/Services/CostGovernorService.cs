@@ -106,7 +106,8 @@ public sealed class CostGovernorService(
     private static Money EstimateCost(int estimatedTokens, decimal pricePerThousandTokens) =>
         Money.FromDecimal(estimatedTokens / 1000m * pricePerThousandTokens * SafetyMargin);
 
-    public async Task<bool> ReconcileAsync(
+        public async Task<bool> ReconcileAsync(
+        string userId, // <-- ADDED
         string reservationId,
         EquipFlow.Domain.Budget.ValueObjects.TokenUsage actualUsage,
         string modelUsed,
@@ -114,26 +115,26 @@ public sealed class CostGovernorService(
         CancellationToken cancellationToken = default)
     {
         if (!Guid.TryParse(reservationId, out var parsedReservationId)) return false;
+        var parsedUserId = ParseUserId(userId); // <-- ADDED
 
         try
         {
-            // Find budget without lock first to identify the UserId
-            var budgets = await userBudgetRepository.GetAllAsync(cancellationToken);
-            var budget = budgets.FirstOrDefault(item => item.Reservations.Any(r => r.Id == parsedReservationId));
+            // ELIMINATED FULL-TABLE SCAN: Fetch budget directly using userId with pessimistic lock
+            await using var uow = await transactionManager.BeginTransactionAsync(cancellationToken);
+            var lockedBudget = await userBudgetRepository.GetByUserIdForUpdateAsync(parsedUserId, cancellationToken);
                 
-            if (budget is null)
+            if (lockedBudget is null)
             {
-                logger.LogWarning("Unable to reconcile missing reservation {ReservationId}.", reservationId);
+                logger.LogWarning("Unable to reconcile missing reservation {ReservationId} for user {UserId}.", reservationId, userId);
                 return false;
             }
 
-            await using var uow = await transactionManager.BeginTransactionAsync(cancellationToken);
-            var lockedBudget = await userBudgetRepository.GetByUserIdForUpdateAsync(budget.UserId, cancellationToken);
-            
-            if (lockedBudget is null) return false;
-
             var reservation = lockedBudget.Reservations.FirstOrDefault(item => item.Id == parsedReservationId);
-            if (reservation is null) return false;
+            if (reservation is null)
+            {
+                logger.LogWarning("Reservation {ReservationId} not found in budget for user {UserId}.", reservationId, userId);
+                return false;
+            }
 
             var pricing = _openAIOptions.ModelPricing.TryGetValue(modelUsed, out var modelPricing)
                 ? modelPricing

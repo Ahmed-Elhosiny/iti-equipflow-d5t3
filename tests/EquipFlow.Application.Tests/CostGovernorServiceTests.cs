@@ -68,6 +68,7 @@ public sealed class CostGovernorServiceTests
         var reservation = await service.EstimateAndReserveAsync(userId.ToString(), 1000, 0.01m);
 
         var reconciled = await service.ReconcileAsync(
+            userId.ToString(),
             reservation.ReservationId!.Value.ToString(),
             BudgetTokenUsage.FromActual(100, 100),
             "gpt-4o-mini");
@@ -89,6 +90,7 @@ public sealed class CostGovernorServiceTests
         var reservation = await service.EstimateAndReserveAsync(userId.ToString(), 1000, 0.0001m);
 
         var reconciled = await service.ReconcileAsync(
+            userId.ToString(),
             reservation.ReservationId!.Value.ToString(),
             BudgetTokenUsage.FromActual(1000, 1000),
             "gpt-4o-mini");
@@ -169,6 +171,7 @@ public sealed class CostGovernorServiceTests
         var service = CreateService(repository, new FakeModelRouter(null));
 
         var reconciled = await service.ReconcileAsync(
+            userId.ToString(),
             Guid.NewGuid().ToString(),
             BudgetTokenUsage.FromActual(100, 100),
             "gpt-4o-mini");

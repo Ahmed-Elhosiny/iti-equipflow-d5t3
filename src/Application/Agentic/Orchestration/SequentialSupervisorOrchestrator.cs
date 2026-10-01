@@ -16,7 +16,7 @@ public sealed class SequentialSupervisorOrchestrator(
     ICostGovernor costGovernor,
     IAgentEventStore agentEventStore,
     ISender sender,
-    ITokenEstimator tokenEstimator, // <-- ADDED
+    ITokenEstimator tokenEstimator,
     ILogger<SequentialSupervisorOrchestrator> logger,
     ICachePort? cachePort = null)
 {
@@ -39,7 +39,7 @@ public sealed class SequentialSupervisorOrchestrator(
         var finalStatus = AgentRunStatus.Failed;
         string? finalError = null;
         string? outputSummary = null;
-        Guid? reservationId = null;
+
         var resolvedUserId = string.IsNullOrWhiteSpace(context.UserId)
             ? string.IsNullOrWhiteSpace(request.UserId) ? MockUserId : request.UserId
             : context.UserId;
@@ -61,45 +61,26 @@ public sealed class SequentialSupervisorOrchestrator(
 
         try
         {
-            // Genuine pre-flight estimation derived from prompt/context size (GAP-2)
-            var estimatedTokens = tokenEstimator.EstimateTokens(request.SymptomDescription);
-            const decimal preFlightPricePer1KTokens = 0.01m; // Blended average rate for estimation; actual cost reconciled later
-
-            var reservation = await costGovernor.EstimateAndReserveAsync(
+            // --- STEP 1: Symptom Matcher ---
+            var (symptomResult, step1Gov) = await ExecuteStepWithBudgetAsync(
+                symptomMatcher,
+                new SymptomMatchInput(request.SymptomDescription, request.EquipmentIdHint),
+                request.SymptomDescription,
                 resolvedUserId,
-                estimatedTokens: estimatedTokens,
-                pricePerThousandTokens: preFlightPricePer1KTokens,
+                correlationId.ToString(),
+                eventCollector,
                 workflowToken,
                 semanticQuery: request.SymptomDescription);
 
-            if (reservation.Status == CostGovernorStatus.Blocked)
-            {
-                finalError = reservation.Reason;
-                return WorkflowResult.Blocked(
-                    reservation.Reason,
-                    reservation.EstimatedCost,
-                    reservation.RemainingBudget);
-            }
-
-            if (reservation.Status == CostGovernorStatus.Cached)
+            if (step1Gov?.Status == CostGovernorStatus.Cached)
             {
                 finalStatus = AgentRunStatus.Success;
                 outputSummary = "Semantic cache hit.";
-                return WorkflowResult.Cached(reservation.CachedResponse!);
+                return WorkflowResult.Cached(step1Gov.CachedResponse!);
             }
-
-            reservationId = reservation.ReservationId!.Value;
-             eventCollector.ReservationId = reservationId.Value.ToString();
-
-            var symptomResult = await ExecuteStepAsync(
-                symptomMatcher,
-                new SymptomMatchInput(request.SymptomDescription, request.EquipmentIdHint),
-                eventCollector,
-                workflowToken);
 
             if (symptomResult.Error is not null)
             {
-                await ReleaseReservationAsync(resolvedUserId, reservationId.Value);
                 var fallbackResult = await TryRagFallbackAsync(request.SymptomDescription, symptomResult.Error, workflowToken);
                 if (fallbackResult is not null)
                 {
@@ -111,18 +92,22 @@ public sealed class SequentialSupervisorOrchestrator(
                 return WorkflowResult.Failed(symptomResult.Error);
             }
 
-            var diagnosticResult = await ExecuteStepAsync(
+            // --- STEP 2: Diagnostic Planner ---
+            var step2InputText = $"{symptomResult.Output.EquipmentId} {string.Join(" ", symptomResult.Output.MatchedSymptoms)}";
+            var (diagnosticResult, _) = await ExecuteStepWithBudgetAsync(
                 diagnosticPlanner,
                 new DiagnosticPlanInput(
                     symptomResult.Output.EquipmentId,
                     symptomResult.Output.ManualRevision,
                     symptomResult.Output.MatchedSymptoms),
+                step2InputText,
+                resolvedUserId,
+                correlationId.ToString(),
                 eventCollector,
                 workflowToken);
 
             if (diagnosticResult.Error is not null)
             {
-                await ReleaseReservationAsync(resolvedUserId, reservationId.Value);
                 var fallbackResult = await TryRagFallbackAsync(request.SymptomDescription, diagnosticResult.Error, workflowToken);
                 if (fallbackResult is not null)
                 {
@@ -134,50 +119,29 @@ public sealed class SequentialSupervisorOrchestrator(
                 return WorkflowResult.Failed(diagnosticResult.Error);
             }
 
-            var workOrderResult = await ExecuteStepAsync(
+            // --- STEP 3: Work Order Generator ---
+            var step3InputText = $"{symptomResult.Output.EquipmentId} {diagnosticResult.Output.Reasoning}";
+            var (workOrderResult, _) = await ExecuteStepWithBudgetAsync(
                 workOrderGenerator,
                 new WorkOrderInput(symptomResult.Output.EquipmentId, diagnosticResult.Output),
+                step3InputText,
+                resolvedUserId,
+                correlationId.ToString(),
                 eventCollector,
                 workflowToken);
 
             if (workOrderResult.Error is not null)
             {
-                await ReleaseReservationAsync(resolvedUserId, reservationId.Value);
                 finalStatus = AgentRunStatus.PartialSuccess;
                 finalError = workOrderResult.Error;
                 outputSummary = "Diagnostic plan produced; work order generation degraded.";
                 return WorkflowResult.PartialSuccess(diagnosticResult.Output, workOrderResult.Error);
             }
 
-            var llmCalls = collectedEvents.OfType<LlmCallCompleted>().ToArray();
-            if (llmCalls.Length == 0)
-            {
-                throw new InvalidOperationException("The workflow completed without recorded LLM usage.");
-            }
-
-            var actualUsage = EquipFlow.Domain.Budget.ValueObjects.TokenUsage.FromActual(
-                llmCalls.Sum(call => call.PromptTokens),
-                llmCalls.Sum(call => call.CompletionTokens));
-            var modelUsed = llmCalls
-                .Select(call => call.ModelIdentifier)
-                .FirstOrDefault(model => !string.IsNullOrWhiteSpace(model) && model != "unknown")
-                ?? reservation.ModelName
-                ?? "gpt-4o-mini";
-            var reconciled = await costGovernor.ReconcileAsync(
-                reservationId.Value.ToString(),
-                actualUsage,
-                modelUsed,
-                correlationId.ToString(),
-                workflowToken);
-            if (!reconciled)
-            {
-                throw new InvalidOperationException("The workflow cost could not be reconciled.");
-            }
-
             finalStatus = AgentRunStatus.Success;
             outputSummary = workOrderResult.Output.Summary;
 
-            // Write to semantic cache for future zero-cost fallbacks (Fail-Open)
+            // Write to semantic cache for future zero-cost fallbacks
             if (cachePort is not null && !string.IsNullOrWhiteSpace(outputSummary))
             {
                 try
@@ -196,21 +160,11 @@ public sealed class SequentialSupervisorOrchestrator(
         {
             finalStatus = AgentRunStatus.Timeout;
             finalError = exception.Message;
-            if (reservationId.HasValue)
-            {
-                await ReleaseReservationAsync(resolvedUserId, reservationId.Value);
-            }
-
             throw;
         }
         catch
         {
             finalStatus = AgentRunStatus.Failed;
-            if (reservationId.HasValue)
-            {
-                await ReleaseReservationAsync(resolvedUserId, reservationId.Value);
-            }
-
             throw;
         }
         finally
@@ -232,13 +186,71 @@ public sealed class SequentialSupervisorOrchestrator(
         }
     }
 
+       private async Task<(AgentResult<TOutput> Result, CostGovernorResult? GovResult)> ExecuteStepWithBudgetAsync<TInput, TOutput>(
+        IAgent<TInput, TOutput> agent,
+        TInput input,
+        string stepInputText,
+        string userId,
+        string correlationId,
+        RecordingAgentContext eventCollector,
+        CancellationToken workflowToken,
+        string? semanticQuery = null)
+    {
+        var estimatedTokens = tokenEstimator.EstimateTokens(stepInputText);
+        const decimal preFlightPricePer1KTokens = 0.01m;
+
+        var reservation = await costGovernor.EstimateAndReserveAsync(
+            userId,
+            estimatedTokens,
+            preFlightPricePer1KTokens,
+            workflowToken,
+            semanticQuery);
+
+        if (reservation.Status == CostGovernorStatus.Blocked || reservation.Status == CostGovernorStatus.Cached)
+        {
+            var blockedOrCachedResult = new AgentResult<TOutput>(default!, [], false, reservation.Status == CostGovernorStatus.Blocked ? reservation.Reason : "CACHE_HIT");
+            return (blockedOrCachedResult, reservation);
+        }
+
+        var eventsBefore = eventCollector.CollectedEvents.OfType<LlmCallCompleted>().Count();
+        
+        var agentResult = await ExecuteStepAsync(agent, input, eventCollector, workflowToken);
+
+        var stepLlmCalls = eventCollector.CollectedEvents.OfType<LlmCallCompleted>().Skip(eventsBefore).ToArray();
+        
+        if (stepLlmCalls.Length > 0)
+        {
+            var actualUsage = EquipFlow.Domain.Budget.ValueObjects.TokenUsage.FromActual(
+                stepLlmCalls.Sum(c => c.PromptTokens),
+                stepLlmCalls.Sum(c => c.CompletionTokens));
+            var modelUsed = stepLlmCalls
+                .Select(c => c.ModelIdentifier)
+                .FirstOrDefault(m => !string.IsNullOrWhiteSpace(m) && m != "unknown")
+                ?? reservation.ModelName ?? "gpt-4o-mini";
+
+            await costGovernor.ReconcileAsync(
+                userId,
+                reservation.ReservationId!.Value.ToString(),
+                actualUsage,
+                modelUsed,
+                correlationId,
+                workflowToken);
+        }
+        else
+        {
+            // If no LLM calls happened (e.g., agent failed before calling LLM), release the reservation
+            await costGovernor.ReleaseAsync(userId, reservation.ReservationId!.Value, workflowToken);
+        }
+
+        return (agentResult, reservation);
+    }
+
     private async Task<WorkflowResult?> TryRagFallbackAsync(string symptomDescription, string originalError, CancellationToken cancellationToken)
     {
         try
         {
             var searchResult = await sender.Send(new SearchDocumentsQuery(symptomDescription, TopK: 5), cancellationToken);
             
-            // Hardened against null Results collection when IsRefusal is true or search fails
             if (searchResult.IsRefusal || searchResult.Results is null || searchResult.Results.Count == 0)
             {
                 logger.LogWarning("RAG fallback failed or found no relevant documents: {Reason}", searchResult.RefusalReason);
@@ -311,15 +323,14 @@ public sealed class SequentialSupervisorOrchestrator(
         }
     }
 
-    private Task ReleaseReservationAsync(string userId, Guid reservationId) =>
-        costGovernor.ReleaseAsync(userId, reservationId, CancellationToken.None);
-
-        private sealed class RecordingAgentContext(
+    private sealed class RecordingAgentContext(
         IAgentContext source,
         Guid correlationId,
         List<AgentEventBase> collectedEvents,
         Action<AgentEventBase>? onEvent) : IAgentContext, IAgentEventCollector
     {
+        public List<AgentEventBase> CollectedEvents => collectedEvents;
+
         public string CorrelationId => correlationId.ToString();
 
         public string UserId => source.UserId;
