@@ -216,8 +216,11 @@ public sealed class SequentialSupervisorOrchestrator(
             return (blockedOrCachedResult, reservation);
         }
 
+        // Inject the active budget reservation ID into the agent context so downstream
+        // LLM calls and tool executions can prove they are operating within an approved budget envelope (ADR-004).
+        eventCollector.ReservationId = reservation.ReservationId?.ToString();
+
         var eventsBefore = eventCollector.CollectedEvents.OfType<LlmCallCompleted>().Count();
-        
         var agentResult = await ExecuteStepAsync(agent, input, eventCollector, workflowToken);
 
         var stepLlmCalls = eventCollector.CollectedEvents.OfType<LlmCallCompleted>().Skip(eventsBefore).ToArray();
@@ -237,7 +240,7 @@ public sealed class SequentialSupervisorOrchestrator(
                 reservation.ReservationId!.Value.ToString(),
                 actualUsage,
                 modelUsed,
-                correlationId,
+                reservation.ReservationId!.Value.ToString(), // Use ReservationId as the unique RunId for spend tracking
                 workflowToken);
         }
         else
