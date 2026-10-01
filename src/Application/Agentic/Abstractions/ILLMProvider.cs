@@ -32,7 +32,10 @@ public sealed record CompletionResult(
     string Text,
     TokenUsage Usage,
     string? FinishReason = null,
-    IReadOnlyList<ToolCall>? ToolCalls = null);
+    IReadOnlyList<ToolCall>? ToolCalls = null,
+    string ProviderName = "unknown",
+    string ModelIdentifier = "unknown",
+    decimal CostUsd = 0m);
 
 public sealed record StreamingChunk(
     string Text,
