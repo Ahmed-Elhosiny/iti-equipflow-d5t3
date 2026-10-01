@@ -1,7 +1,3 @@
-using System.Threading;
-using System.Threading.Tasks;
-using EquipFlow.Domain.Budget.ValueObjects;
-
 namespace EquipFlow.Application.Agentic.Abstractions;
 
 public interface ICostGovernor
@@ -21,6 +17,7 @@ public interface ICostGovernor
         CancellationToken cancellationToken = default);
 
     Task<bool> ReconcileAsync(
+        string userId,
         string reservationId,
         EquipFlow.Domain.Budget.ValueObjects.TokenUsage actualUsage,
         string modelUsed,
