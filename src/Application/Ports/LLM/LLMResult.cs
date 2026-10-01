@@ -17,4 +17,7 @@ public sealed record LLMResult(
     string FinishReason,
     int PromptTokens,
     int CompletionTokens,
-    TokenUsage? Usage = null);
+    TokenUsage? Usage = null,
+    string ProviderName = "unknown",
+    string ModelIdentifier = "unknown",
+    decimal CostUsd = 0m);

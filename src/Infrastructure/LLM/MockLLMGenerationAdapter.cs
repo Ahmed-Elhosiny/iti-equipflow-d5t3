@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using EquipFlow.Application.Ports.LLM;
+using EquipFlow.Domain.Budget.ValueObjects;
 
 namespace EquipFlow.Infrastructure.LLM;
 
@@ -31,12 +32,19 @@ public sealed class MockLLMGenerationAdapter : ILLMGenerationPort
             promptLength += message.Content.Length;
         }
 
+                var promptTokens = EstimateTokens(promptLength);
+        var completionTokens = EstimateTokens(CompletionContent.Length);
+
         var result = new LLMResult(
             CompletionContent,
             null,
             "stop",
-            EstimateTokens(promptLength),
-            EstimateTokens(CompletionContent.Length));
+            promptTokens,
+            completionTokens,
+            TokenUsage.FromActual(promptTokens, completionTokens),
+            "Mock",
+            "mock-model",
+            0m);
 
         return Task.FromResult(result);
     }

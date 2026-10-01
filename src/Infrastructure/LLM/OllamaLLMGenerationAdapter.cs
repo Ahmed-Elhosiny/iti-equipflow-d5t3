@@ -118,7 +118,10 @@ public sealed class OllamaLLMGenerationAdapter : ILLMGenerationPort
                 toolCalls is not null ? "tool_calls" : "stop",
                 result.PromptEvalCount,
                 result.EvalCount,
-                TokenUsage.FromActual(result.PromptEvalCount, result.EvalCount));
+                TokenUsage.FromActual(result.PromptEvalCount, result.EvalCount),
+                "Ollama",
+                _options.Value.Model,
+                0m); // Ollama is self-hosted, so direct API cost is 0
         }
         catch (OperationCanceledException)
         {

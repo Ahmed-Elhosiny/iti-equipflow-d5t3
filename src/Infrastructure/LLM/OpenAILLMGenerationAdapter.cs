@@ -90,17 +90,28 @@ public sealed class OpenAILLMGenerationAdapter : ILLMGenerationPort
                     .ToList()
                 : null;
 
+                        var promptTokens = response.Usage?.InputTokenCount ?? 0;
+            var completionTokens = response.Usage?.OutputTokenCount ?? 0;
+            
+            // Calculate genuine cost using the injected ModelPricing dictionary
+            var pricing = _options.Value.ModelPricing.GetValueOrDefault(
+                _options.Value.Model, 
+                (_options.Value.PromptTokenPricePer1K, _options.Value.CompletionTokenPricePer1K));
+                
+            var costUsd = (promptTokens / 1000m * pricing.Item1) + (completionTokens / 1000m * pricing.Item2);
+
             return new LLMResult(
                 content,
                 toolCalls,
                 response.FinishReason.ToString(),
-                response.Usage?.InputTokenCount ?? 0,
-                response.Usage?.OutputTokenCount ?? 0,
+                promptTokens,
+                completionTokens,
                 response.Usage is null
                     ? null
-                    : TokenUsage.FromActual(
-                        response.Usage.InputTokenCount,
-                        response.Usage.OutputTokenCount));
+                    : TokenUsage.FromActual(promptTokens, completionTokens),
+                "OpenAI",
+                _options.Value.Model,
+                costUsd);
         }
         catch (OperationCanceledException)
         {
