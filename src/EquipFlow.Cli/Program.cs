@@ -55,8 +55,25 @@ async Task LoginAsync(string[] args)
     if (!res.IsSuccessStatusCode) { Console.WriteLine($"Login failed: {res.StatusCode}"); return; }
     
     var json = await res.Content.ReadFromJsonAsync<JsonElement>();
-    var token = json.GetProperty("accessToken").GetString();
-    await File.WriteAllTextAsync(tokenFile, token!);
+    
+    if (!json.TryGetProperty("token", out var tokenElement) || tokenElement.ValueKind != JsonValueKind.String)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine("Login failed: API response did not contain a valid 'token' field.");
+        Console.ResetColor();
+        return;
+    }
+
+    var token = tokenElement.GetString();
+    if (string.IsNullOrWhiteSpace(token))
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine("Login failed: Received an empty token from the API.");
+        Console.ResetColor();
+        return;
+    }
+
+    await File.WriteAllTextAsync(tokenFile, token);
     Console.ForegroundColor = ConsoleColor.Green;
     Console.WriteLine("Login successful. Token saved to .equipflow-token");
     Console.ResetColor();
