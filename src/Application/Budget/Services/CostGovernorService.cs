@@ -14,18 +14,18 @@ public sealed class CostGovernorService(
     IRunSpendRepository runSpendRepository,
     ITransactionManager transactionManager,
     ILogger<CostGovernorService> logger,
+    Microsoft.Extensions.Options.IOptions<OpenAIOptions> openAiOptions,
     IModelRouter? modelRouter = null,
     ICachePort? cachePort = null) : ICostGovernor
 {
     private const decimal SafetyMargin = 1.2m;
     private const decimal MockFallbackRateMultiplier = 0.5m;
     private static readonly Money DefaultBudgetLimit = Money.FromDecimal(10m);
-    private readonly OpenAIOptions _openAIOptions = new("gpt-4o-mini", string.Empty, null);
-
-    public async Task<CostGovernorResult> EstimateAndReserveAsync(
+    private readonly OpenAIOptions _openAIOptions = openAiOptions.Value;
+       public async Task<CostGovernorResult> EstimateAndReserveAsync(
         string userId,
         int estimatedTokens,
-        decimal pricePerThousandTokens,
+        string primaryModelName, // CHANGED
         CancellationToken cancellationToken = default,
         string? semanticQuery = null)
     {
@@ -33,7 +33,7 @@ public sealed class CostGovernorService(
 
         try
         {
-            // 1. CHECK SEMANTIC CACHE FIRST (Zero Cost Fallback) - Read-only, no lock needed
+            // 1. CHECK SEMANTIC CACHE FIRST
             var cacheMatch = cachePort is null
                 ? null
                 : await cachePort.FindSemanticMatchAsync(semanticQuery, cancellationToken);
@@ -44,14 +44,19 @@ public sealed class CostGovernorService(
                 return CostGovernorResult.Cached(cacheMatch.Response, 0m, budgetForCache.AvailableAmount.Amount);
             }
 
+            // Resolve primary price from configuration (using prompt rate for conservative pre-flight)
+            var primaryPrice = _openAIOptions.ModelPricing.TryGetValue(primaryModelName, out var pricing)
+                ? pricing.Prompt
+                : _openAIOptions.PromptTokenPricePer1K;
+
             // 2. BEGIN TRANSACTION FOR PESSIMISTIC LOCKING
             await using var uow = await transactionManager.BeginTransactionAsync(cancellationToken);
             var budget = await GetOrCreateBudgetForUpdateAsync(parsedUserId, cancellationToken);
             
-            var primaryCost = EstimateCost(estimatedTokens, pricePerThousandTokens);
+            var primaryCost = EstimateCost(estimatedTokens, primaryPrice);
 
             // 3. TRY PRIMARY MODEL
-            var primaryReservation = await TryReserveAsync(budget, primaryCost, "primary", cancellationToken);
+            var primaryReservation = await TryReserveAsync(budget, primaryCost, primaryModelName, cancellationToken);
             if (primaryReservation is not null)
             {
                 await uow.CommitAsync(cancellationToken);
@@ -61,10 +66,10 @@ public sealed class CostGovernorService(
             // 4. TRY FALLBACK MODEL
             var fallbackModel = modelRouter is null
                 ? null
-                : await modelRouter.GetCheaperModelAsync(pricePerThousandTokens, cancellationToken);
-            fallbackModel ??= new ModelRoute("fallback", pricePerThousandTokens * MockFallbackRateMultiplier);
+                : await modelRouter.GetCheaperModelAsync(primaryPrice, cancellationToken);
+            fallbackModel ??= new ModelRoute("fallback", primaryPrice * MockFallbackRateMultiplier);
                 
-            if (fallbackModel is not null && fallbackModel.PricePerThousandTokens < pricePerThousandTokens)
+            if (fallbackModel is not null && fallbackModel.PricePerThousandTokens < primaryPrice)
             {
                 var fallbackCost = EstimateCost(estimatedTokens, fallbackModel.PricePerThousandTokens);
                 var fallbackReservation = await TryReserveAsync(budget, fallbackCost, fallbackModel.ModelName, cancellationToken);
@@ -76,12 +81,11 @@ public sealed class CostGovernorService(
                 primaryCost = fallbackCost;
             }
 
-            // 5. BLOCKED (Transaction rolls back automatically on dispose)
+            // 5. BLOCKED
             return CostGovernorResult.Blocked(primaryCost.Amount, budget.AvailableAmount.Amount);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // FAIL-CLOSED: If the budget store is unavailable, deny execution to prevent untracked spend
             logger.LogError(ex, "Budget store unavailable during pre-flight estimation for user {UserId}. Failing closed.", userId);
             return CostGovernorResult.Blocked(0m, 0m, "budget_store_unavailable");
         }
