@@ -232,7 +232,7 @@ public static class WorkOrderEndpoints
         }
     }
 
-      private static async Task<IResult> GetById(
+    private static async Task<IResult> GetById(
         Guid id,
         ClaimsPrincipal user,
         ISender sender,
@@ -244,10 +244,13 @@ public static class WorkOrderEndpoints
             return Results.Unauthorized();
         }
 
+        // Extract role to enforce RBAC matrix in the Application layer without leaking HttpContext
+        var userRole = user.FindFirstValue(System.Security.Claims.ClaimTypes.Role) ?? "Technician";
+
         try
         {
             var workOrder = await sender.Send(
-                new GetWorkOrderByIdQuery(id, userId.Value.ToString()),
+                new GetWorkOrderByIdQuery(id, userId.Value.ToString(), userRole),
                 cancellationToken);
             return Results.Ok(workOrder);
         }
