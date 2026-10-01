@@ -6,7 +6,7 @@ using MediatR;
 
 namespace EquipFlow.Application.WorkOrders.Queries;
 
-public sealed record GetWorkOrderByIdQuery(Guid WorkOrderId, string RequestingUserId) : IRequest<WorkOrderDto>;
+public sealed record GetWorkOrderByIdQuery(Guid WorkOrderId, string RequestingUserId, string RequestingUserRole) : IRequest<WorkOrderDto>;
 
 public sealed class GetWorkOrderByIdQueryHandler(IWorkOrderRepository repository)
     : IRequestHandler<GetWorkOrderByIdQuery, WorkOrderDto>
@@ -18,8 +18,12 @@ public sealed class GetWorkOrderByIdQueryHandler(IWorkOrderRepository repository
         var workOrder = await repository.GetByIdAsync(request.WorkOrderId, cancellationToken)
             ?? throw new WorkOrderNotFoundException(request.WorkOrderId);
 
-        // Object-level authorization: Fail closed with 404 to prevent resource enumeration
-        if (!string.Equals(workOrder.CreatedBy, request.RequestingUserId, StringComparison.OrdinalIgnoreCase))
+        // Object-level authorization: Fail closed with 404 to prevent resource enumeration.
+        // Exempt Supervisors and Managers who require fleet-wide visibility for approval and oversight (RBAC Matrix).
+        var isFleetRole = string.Equals(request.RequestingUserRole, "Supervisor", StringComparison.OrdinalIgnoreCase) ||
+                          string.Equals(request.RequestingUserRole, "Manager", StringComparison.OrdinalIgnoreCase);
+
+        if (!isFleetRole && !string.Equals(workOrder.CreatedBy, request.RequestingUserId, StringComparison.OrdinalIgnoreCase))
         {
             throw new WorkOrderNotFoundException(request.WorkOrderId);
         }

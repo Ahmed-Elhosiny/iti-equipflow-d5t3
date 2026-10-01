@@ -30,11 +30,12 @@ public sealed class CheckApprovalStatusExecutor(ISender sender) : IToolExecutor
     public Task<ToolExecutionResult> ExecuteAsync(
         JsonElement arguments,
         CancellationToken cancellationToken = default) =>
-        ExecuteAsync(arguments, null, cancellationToken);
+        ExecuteAsync(arguments, null, null, cancellationToken);
 
-    private async Task<ToolExecutionResult> ExecuteAsync(
+      private async Task<ToolExecutionResult> ExecuteAsync(
         JsonElement arguments,
         string? userId,
+        string? userRole,
         CancellationToken cancellationToken)
     {
         try
@@ -49,7 +50,7 @@ public sealed class CheckApprovalStatusExecutor(ISender sender) : IToolExecutor
             }
 
             var workOrder = await sender.Send(
-                new GetWorkOrderByIdQuery(request.WorkOrderId, userId ?? string.Empty),
+                new GetWorkOrderByIdQuery(request.WorkOrderId, userId ?? string.Empty, userRole ?? "Technician"),
                 cancellationToken);
             if (workOrder is null)
             {
@@ -95,8 +96,12 @@ public sealed class CheckApprovalStatusExecutor(ISender sender) : IToolExecutor
         try
         {
             using var document = JsonDocument.Parse(request.ArgumentsJson);
-            // Extract the UserId from the ToolInvocationContext to satisfy the object-level authorization check
-            var result = await ExecuteAsync(document.RootElement, request.Context.UserId.ToString(), cancellationToken);
+            // Extract the UserId and UserRole from the ToolInvocationContext to satisfy the object-level authorization check
+            var result = await ExecuteAsync(
+                document.RootElement, 
+                request.Context.UserId.ToString(), 
+                request.Context.UserRole, 
+                cancellationToken);  
 
             return new ToolDispatchResult(
                 request.ToolName,
