@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenAI;
 using OpenAI.Chat;
+using System.ClientModel;
 using System.Runtime.CompilerServices;
 using ApplicationChatMessage = EquipFlow.Application.Ports.LLM.ChatMessage;
 using ApplicationToolCall = EquipFlow.Application.Ports.LLM.ToolCall;
@@ -32,12 +33,19 @@ public sealed class OpenAILLMGenerationAdapter : ILLMGenerationPort
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
 
-        if (string.IsNullOrWhiteSpace(options.Value.ApiKey))
+         if (string.IsNullOrWhiteSpace(options.Value.ApiKey))
         {
             throw new ArgumentException("OpenAI API key is required.", nameof(options));
         }
 
-        _client = new OpenAIClient(options.Value.ApiKey);
+        var clientOptions = new OpenAIClientOptions();
+        if (!string.IsNullOrWhiteSpace(options.Value.Endpoint))
+        {
+            clientOptions.Endpoint = new Uri(options.Value.Endpoint);
+        }
+
+        var credential = new ApiKeyCredential(options.Value.ApiKey);
+        _client = new OpenAIClient(credential, clientOptions);
         _options = options;
         _logger = logger;
     }

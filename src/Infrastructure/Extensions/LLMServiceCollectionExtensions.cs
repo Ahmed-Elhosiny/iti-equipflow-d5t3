@@ -20,9 +20,9 @@ public static class LLMServiceCollectionExtensions
     {
         services.AddHttpClient();
         services.Configure<Application.Options.OpenAIOptions>(
-            configuration.GetSection("LLM:OpenAI"));
+            configuration.GetSection("OpenAI"));
         services.Configure<Application.Options.OllamaOptions>(
-            configuration.GetSection("LLM:Ollama"));
+            configuration.GetSection("Ollama"));
         services.AddKeyedSingleton<Application.Ports.LLM.ILLMGenerationPort, Infrastructure.LLM.MockLLMGenerationAdapter>("Mock");
         services.AddKeyedSingleton<Application.Ports.LLM.ILLMGenerationPort, Infrastructure.LLM.OpenAILLMGenerationAdapter>("OpenAI");
         services.AddKeyedSingleton<Application.Ports.LLM.ILLMGenerationPort, Infrastructure.LLM.OllamaLLMGenerationAdapter>("Ollama");
