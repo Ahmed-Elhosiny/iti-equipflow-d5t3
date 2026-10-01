@@ -6,25 +6,29 @@ using EquipFlow.Domain.Budget;
 using EquipFlow.Domain.Budget.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using BudgetTokenUsage = EquipFlow.Domain.Budget.ValueObjects.TokenUsage;
+using EquipFlow.Application.Options;
 
 namespace EquipFlow.Application.Tests;
 
 public sealed class CostGovernorServiceTests
 {
-    [Fact]
+   [Fact]
     public async Task EstimateAndReserveAsync_UsesCheaperModelWhenPrimaryDoesNotFit()
     {
         var userId = Guid.NewGuid();
-        var repository = new FakeUserBudgetRepository(new UserBudget(userId, Money.FromDecimal(0.02m)));
-        var router = new FakeModelRouter(new ModelRoute("cheap", 0.005m));
+        // Budget is 0.002m. gpt-4o (0.0025/1k) costs 0.009m, which exceeds budget.
+        var repository = new FakeUserBudgetRepository(new UserBudget(userId, Money.FromDecimal(0.002m)));
+        // Fallback "cheap" is 0.0005/1k -> costs 0.0018m, which fits in 0.002m budget.
+        var router = new FakeModelRouter(new ModelRoute("cheap", 0.0005m));
         var service = CreateService(repository, router);
 
-        var result = await service.EstimateAndReserveAsync(userId.ToString(), 3000, 0.01m);
+        // Requesting expensive model
+        var result = await service.EstimateAndReserveAsync(userId.ToString(), 3000, "gpt-4o");
 
         Assert.Equal(CostGovernorStatus.Reserved, result.Status);
         Assert.Equal("cheap", result.ModelName);
         Assert.NotNull(result.ReservationId);
-        Assert.Equal(0.018m, result.EstimatedCost);
+        Assert.Equal(0.0018m, result.EstimatedCost);
     }
 
     [Fact]
@@ -35,7 +39,7 @@ public sealed class CostGovernorServiceTests
         var cache = new FakeCachePort(new SemanticCacheMatch("request", "cached answer"));
         var service = CreateService(repository, new FakeModelRouter(null), cache);
 
-        var result = await service.EstimateAndReserveAsync(userId.ToString(), 3000, 0.01m, semanticQuery: "request");
+        var result = await service.EstimateAndReserveAsync(userId.ToString(), 3000, "gpt-4o-mini", semanticQuery: "request");
 
         Assert.Equal(CostGovernorStatus.Cached, result.Status);
         Assert.Equal("cached answer", result.CachedResponse);
@@ -46,15 +50,15 @@ public sealed class CostGovernorServiceTests
     public async Task EstimateAndReserveAsync_ReturnsStructuredRefusalWhenCascadeFails()
     {
         var userId = Guid.NewGuid();
-        var repository = new FakeUserBudgetRepository(new UserBudget(userId, Money.FromDecimal(0.01m)));
+        var repository = new FakeUserBudgetRepository(new UserBudget(userId, Money.FromDecimal(0.0001m)));
         var service = CreateService(repository, new FakeModelRouter(null));
 
-        var result = await service.EstimateAndReserveAsync(userId.ToString(), 3000, 0.01m);
+        var result = await service.EstimateAndReserveAsync(userId.ToString(), 3000, "gpt-4o-mini");
 
         Assert.Equal(CostGovernorStatus.Blocked, result.Status);
         Assert.Equal("budget_exhausted", result.Reason);
-        Assert.Equal(0.018m, result.EstimatedCost);
-        Assert.Equal(0.01m, result.RemainingBudget);
+        Assert.Equal(0.00027m, result.EstimatedCost); // CHANGED: 3000 * (0.00015 * 0.5 fallback) * 1.2
+        Assert.Equal(0.0001m, result.RemainingBudget);
     }
 
     [Fact]
@@ -65,7 +69,7 @@ public sealed class CostGovernorServiceTests
         var repository = new FakeUserBudgetRepository(budget);
         var service = CreateService(repository, new FakeModelRouter(null));
 
-        var reservation = await service.EstimateAndReserveAsync(userId.ToString(), 1000, 0.01m);
+        var reservation = await service.EstimateAndReserveAsync(userId.ToString(), 1000, "gpt-4o-mini");
 
         var reconciled = await service.ReconcileAsync(
             userId.ToString(),
@@ -87,7 +91,8 @@ public sealed class CostGovernorServiceTests
         var repository = new FakeUserBudgetRepository(budget);
         var service = CreateService(repository, new FakeModelRouter(null));
 
-        var reservation = await service.EstimateAndReserveAsync(userId.ToString(), 1000, 0.0001m);
+        // Act
+        var reservation = await service.EstimateAndReserveAsync(userId.ToString(), 1000, "gpt-4o-mini");
 
         var reconciled = await service.ReconcileAsync(
             userId.ToString(),
@@ -115,7 +120,7 @@ public sealed class CostGovernorServiceTests
         var result = await service.EstimateAndReserveAsync(
             userId.ToString(), 
             3000, 
-            0.01m, 
+            "gpt-4o-mini",
             semanticQuery: "pump overheating");
 
         // Assert
@@ -141,7 +146,7 @@ public sealed class CostGovernorServiceTests
         var result = await service.EstimateAndReserveAsync(
             userId.ToString(), 
             3000, 
-            0.01m, 
+            "gpt-4o-mini",
             semanticQuery: "unique query");
 
         // Assert
@@ -157,7 +162,8 @@ public sealed class CostGovernorServiceTests
         var repository = new ThrowingUserBudgetRepository();
         var service = CreateService(repository, new FakeModelRouter(null));
 
-        var result = await service.EstimateAndReserveAsync(userId.ToString(), 3000, 0.01m);
+        // Act
+        var result = await service.EstimateAndReserveAsync(userId.ToString(), 3000, "gpt-4o-mini");
 
         Assert.Equal(CostGovernorStatus.Blocked, result.Status);
         Assert.Equal("budget_store_unavailable", result.Reason);
@@ -179,17 +185,18 @@ public sealed class CostGovernorServiceTests
         Assert.False(reconciled);
     }
 
-           private static CostGovernorService CreateService(
-        IUserBudgetRepository repository, // <-- Changed from FakeUserBudgetRepository
+    private static CostGovernorService CreateService(
+        IUserBudgetRepository repository,
         IModelRouter router,
         ICachePort? cache = null) =>
-        new(
-            repository,
-            new FakeRunSpendRepository(),
-            new FakeTransactionManager(),
-            NullLogger<CostGovernorService>.Instance,
-            router,
-            cache);
+    new(
+        repository,
+        new FakeRunSpendRepository(),
+        new FakeTransactionManager(),
+        NullLogger<CostGovernorService>.Instance,
+        Microsoft.Extensions.Options.Options.Create(new OpenAIOptions()), 
+        router,
+        cache);
 
     private sealed class FakeTransactionManager : ITransactionManager
     {

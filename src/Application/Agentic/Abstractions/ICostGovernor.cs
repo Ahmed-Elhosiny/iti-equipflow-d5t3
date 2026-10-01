@@ -5,7 +5,7 @@ public interface ICostGovernor
     Task<CostGovernorResult> EstimateAndReserveAsync(
         string userId,
         int estimatedTokens,
-        decimal pricePerThousandTokens,
+        string pricePerThousandTokens,
         CancellationToken cancellationToken = default,
         string? semanticQuery = null);
 

@@ -17,11 +17,13 @@ public sealed class SequentialSupervisorOrchestrator(
     IAgentEventStore agentEventStore,
     ISender sender,
     ITokenEstimator tokenEstimator,
+    Microsoft.Extensions.Options.IOptions<EquipFlow.Application.Options.OpenAIOptions> openAiOptions, 
     ILogger<SequentialSupervisorOrchestrator> logger,
     ICachePort? cachePort = null)
 {
     private static readonly TimeSpan AgentTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan WorkflowTimeout = TimeSpan.FromSeconds(120);
+    private readonly Microsoft.Extensions.Options.IOptions<EquipFlow.Application.Options.OpenAIOptions> _openAiOptions = openAiOptions;
 
     public async Task<WorkflowResult> RunWorkflowAsync(
         MaintenanceRequest request,
@@ -199,12 +201,12 @@ public sealed class SequentialSupervisorOrchestrator(
         string? semanticQuery = null)
     {
         var estimatedTokens = tokenEstimator.EstimateTokens(stepInputText);
-        const decimal preFlightPricePer1KTokens = 0.01m;
+        // const decimal preFlightPricePer1KTokens = 0.01m;
 
         var reservation = await costGovernor.EstimateAndReserveAsync(
             userId,
             estimatedTokens,
-            preFlightPricePer1KTokens,
+            _openAiOptions.Value.Model,
             workflowToken,
             semanticQuery);
 

@@ -1,9 +1,11 @@
 using System.Text.Json;
 using EquipFlow.Application.Agentic.Abstractions;
+using EquipFlow.Application.Options;
 using EquipFlow.Application.Tools.Definitions;
 using EquipFlow.Application.Tools.Ports;
 using EquipFlow.Infrastructure.Tools.Executors;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace EquipFlow.Infrastructure.Tests.Tools;
@@ -22,7 +24,7 @@ public sealed class ValidateBudgetExecutorTests
         governor.EstimateAndReserveAsync(
                 Arg.Any<string>(),
                 3000,
-                Arg.Any<decimal>(),
+                Arg.Any<string>(), // CHANGED from decimal to string (model name)
                 Arg.Any<CancellationToken>(),
                 Arg.Any<string?>())
             .Returns(reservation);
@@ -47,7 +49,7 @@ public sealed class ValidateBudgetExecutorTests
         governor.EstimateAndReserveAsync(
                 Arg.Any<string>(),
                 Arg.Any<int>(),
-                Arg.Any<decimal>(),
+                Arg.Any<string>(), // CHANGED from decimal to string (model name)
                 Arg.Any<CancellationToken>(),
                 Arg.Any<string?>())
             .Returns(CostGovernorResult.Blocked(0.036m, 0.01m));
@@ -72,7 +74,7 @@ public sealed class ValidateBudgetExecutorTests
         governor.EstimateAndReserveAsync(
                 Arg.Any<string>(),
                 Arg.Any<int>(),
-                Arg.Any<decimal>(),
+                Arg.Any<string>(), // CHANGED from decimal to string (model name)
                 Arg.Any<CancellationToken>(),
                 Arg.Any<string?>())
             .Returns(Task.FromException<CostGovernorResult>(
@@ -102,7 +104,10 @@ public sealed class ValidateBudgetExecutorTests
     }
 
     private static ValidateBudgetExecutor CreateExecutor(ICostGovernor governor) =>
-        new(governor, Substitute.For<ILogger<ValidateBudgetExecutor>>());
+        new(
+            governor, 
+            Substitute.For<ILogger<ValidateBudgetExecutor>>(),
+            Options.Create(new OpenAIOptions())); // ADDED IOptions<OpenAIOptions>
 
     private static ToolInvocationRequest CreateRequest(string argumentsJson) =>
         new("ValidateBudget", argumentsJson, new ToolInvocationContext(

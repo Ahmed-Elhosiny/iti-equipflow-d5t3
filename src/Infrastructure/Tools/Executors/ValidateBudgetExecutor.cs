@@ -1,22 +1,22 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using EquipFlow.Application.Agentic.Abstractions;
+using EquipFlow.Application.Options;
 using EquipFlow.Application.Tools.Definitions;
 using EquipFlow.Application.Tools.Ports;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace EquipFlow.Infrastructure.Tools.Executors;
 
 /// <summary>
 /// Executes the <c>validate_budget</c> tool.
 /// </summary>
-/// <param name="costGovernor">The Cost Governor used to validate the estimated cost.</param>
 public sealed class ValidateBudgetExecutor(
     ICostGovernor costGovernor,
-    ILogger<ValidateBudgetExecutor> logger) : IToolExecutor
+    ILogger<ValidateBudgetExecutor> logger,
+    IOptions<OpenAIOptions> openAiOptions) : IToolExecutor // ADDED IOptions<OpenAIOptions>
 {
-    private const decimal DefaultPricePerThousandTokens = 0.01m;
-
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -68,7 +68,7 @@ public sealed class ValidateBudgetExecutor(
                 budgetResult = await costGovernor.EstimateAndReserveAsync(
                     userId,
                     estimatedTokens,
-                    DefaultPricePerThousandTokens,
+                    openAiOptions.Value.Model, // FIXED: Pass configured model name instead of hardcoded decimal
                     cancellationToken);
             }
             else if (request.EstimatedCost is decimal estimatedCost)

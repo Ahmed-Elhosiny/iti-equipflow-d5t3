@@ -28,7 +28,7 @@ public sealed class CostGovernorEvalTests : IClassFixture<CostGovernorWebApplica
         var userId = await SeedBudgetAsync(1m);
         var callCount = 0;
 
-        var result = await ExecuteBillableRequestAsync(userId, 1000, 0.01m, () => callCount++);
+        var result = await ExecuteBillableRequestAsync(userId, 1000, "gpt-4o-mini", () => callCount++);
 
         Assert.Equal(CostGovernorStatus.Reserved, result.Status);
         Assert.Equal(1, callCount);
@@ -40,17 +40,18 @@ public sealed class CostGovernorEvalTests : IClassFixture<CostGovernorWebApplica
     }
 
         [Fact]
-    public async Task InsufficientBudget_ReturnsStructuredRefusalWithoutCallingLlmOrDeductingBudget()
+    public async Task InsufficientBudget_FallsBackToOllamaAndReservesZeroCost()
     {
-        // Budget is set lower than the cost of the cheapest fallback model (gpt-4o-mini = 0.00054m)
         var userId = await SeedBudgetAsync(0.0001m); 
         var callCount = 0;
 
-        var result = await ExecuteBillableRequestAsync(userId, 3000, 0.01m, () => callCount++);
+        // Requesting gpt-4o-mini (0.00054m cost) exceeds 0.0001m budget, cascading to free Ollama
+        var result = await ExecuteBillableRequestAsync(userId, 3000, "gpt-4o-mini", () => callCount++);
 
-        Assert.Equal(CostGovernorStatus.Blocked, result.Status);
-        Assert.Equal("budget_exhausted", result.Reason);
-        Assert.Equal(0, callCount);
+        Assert.Equal(CostGovernorStatus.Reserved, result.Status);
+        Assert.Equal("Ollama", result.ModelName);
+        Assert.Equal(0m, result.EstimatedCost);
+        Assert.Equal(1, callCount);
 
         var budget = await ReadBudgetAsync(userId);
         Assert.Equal(0m, budget.ConsumedAmount.Amount);
@@ -60,15 +61,14 @@ public sealed class CostGovernorEvalTests : IClassFixture<CostGovernorWebApplica
     [Fact]
     public async Task FallbackRouting_UsesCheaperModelWhenPrimaryExceedsBudget()
     {
-        var userId = await SeedBudgetAsync(0.02m);
+        var userId = await SeedBudgetAsync(0.005m); 
         var callCount = 0;
 
-        var result = await ExecuteBillableRequestAsync(userId, 3000, 0.01m, () => callCount++);
+        // Requesting gpt-4o (0.009m cost) exceeds 0.005m budget, cascading to gpt-4o-mini
+        var result = await ExecuteBillableRequestAsync(userId, 3000, "gpt-4o", () => callCount++);
 
         Assert.Equal(CostGovernorStatus.Reserved, result.Status);
-        // The smart router now cascades to gpt-4o-mini instead of a generic "fallback"
         Assert.Equal("gpt-4o-mini", result.ModelName); 
-        // 3000 tokens * 0.00015 price * 1.2 safety margin = 0.00054m
         Assert.Equal(0.00054m, result.EstimatedCost); 
         Assert.Equal(1, callCount);
     }
@@ -77,23 +77,27 @@ public sealed class CostGovernorEvalTests : IClassFixture<CostGovernorWebApplica
     [Fact]
     public async Task ConcurrentRequests_ReserveOnlyWithinAvailableBudget()
     {
-        var userId = await SeedBudgetAsync(0.072m);
+        var userId = await SeedBudgetAsync(0.0015m); 
         var callCount = 0;
+        
+        // Requesting gpt-4o-mini (0.00054m cost). Budget is 0.0015m.
+        // Exactly 2 requests will fit in the budget. 
+        // The remaining 3 will fail the primary check and cascade to the free Ollama model.
         var requests = Enumerable.Range(0, 5)
-            .Select(_ => ExecuteBillableRequestAsync(userId, 3000, 0.01m, () => Interlocked.Increment(ref callCount)))
+            .Select(_ => ExecuteBillableRequestAsync(userId, 3000, "gpt-4o-mini", () => Interlocked.Increment(ref callCount)))
             .ToArray();
 
         var results = await Task.WhenAll(requests);
-        var successful = results.Where(result => result.Status == CostGovernorStatus.Reserved).ToArray();
-        var blocked = results.Where(result => result.Status == CostGovernorStatus.Blocked).ToArray();
+        
+        var miniReservations = results.Where(r => r.ModelName == "gpt-4o-mini").ToArray();
+        var ollamaReservations = results.Where(r => r.ModelName == "Ollama").ToArray();
 
-        Assert.Equal(2, successful.Length);
-        Assert.Equal(3, blocked.Length);
-        Assert.Equal(2, callCount);
-        Assert.All(blocked, result => Assert.Equal("budget_exhausted", result.Reason));
+        Assert.Equal(2, miniReservations.Length);
+        Assert.Equal(3, ollamaReservations.Length);
+        Assert.Equal(5, callCount);
 
         var budget = await ReadBudgetAsync(userId);
-        Assert.Equal(0m, budget.AvailableAmount.Amount);
+        // Budget should be exhausted by the 2 gpt-4o-mini reservations (2 * 0.00054 = 0.00108)
         Assert.True(budget.ConsumedAmount.Amount + budget.ReservedAmount.Amount <= budget.TotalLimit.Amount);
     }
 
@@ -108,7 +112,7 @@ public sealed class CostGovernorEvalTests : IClassFixture<CostGovernorWebApplica
     private async Task<CostGovernorResult> ExecuteBillableRequestAsync(
         Guid userId,
         int estimatedTokens,
-        decimal pricePerThousandTokens,
+        string primaryModelName,
         Action llmCall)
     {
         await using var scope = factory.Services.CreateAsyncScope();
@@ -116,7 +120,7 @@ public sealed class CostGovernorEvalTests : IClassFixture<CostGovernorWebApplica
         var result = await governor.EstimateAndReserveAsync(
             userId.ToString(),
             estimatedTokens,
-            pricePerThousandTokens);
+            primaryModelName);
         if (result.Status == CostGovernorStatus.Reserved)
         {
             llmCall();
@@ -158,7 +162,7 @@ public sealed class CostGovernorWebApplicationFactory : WebApplicationFactory<Pr
             services.AddSingleton<IUserBudgetRepository>(services =>
                 services.GetRequiredService<TestUserBudgetRepository>());
 
-            // ADD THIS: Bypass EF InMemory transaction limitations
+            // Bypass EF InMemory transaction limitations
             services.RemoveAll<EquipFlow.Application.Ports.ITransactionManager>();
             services.AddScoped<EquipFlow.Application.Ports.ITransactionManager, NoOpTransactionManager>();
         });
@@ -206,3 +210,4 @@ public sealed class NoOpTransactionManager : EquipFlow.Application.Ports.ITransa
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }
+
