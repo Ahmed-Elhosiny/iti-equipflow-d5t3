@@ -53,16 +53,18 @@ public sealed class SearchDocumentsQueryHandler
                 "The embedding service must return exactly one embedding for a single query.");
         }
 
-        var vectorSearch = _vectorSearchPort.SearchAsync(
+        // Execute sequentially to prevent EF Core DbContext thread-safety violations.
+        // DbContext is Scoped and not thread-safe; parallel queries on the same context crash.
+        var vectorResults = await _vectorSearchPort.SearchAsync(
             query,
             embeddings[0],
             cancellationToken);
-        var keywordSearch = _keywordSearchPort.SearchAsync(query, cancellationToken);
-        await Task.WhenAll(vectorSearch, keywordSearch);
+            
+        var keywordResults = await _keywordSearchPort.SearchAsync(query, cancellationToken);
 
         IReadOnlyList<RetrievedChunk> candidates = _fusionService.Fuse(
-            vectorSearch.Result,
-            keywordSearch.Result);
+            vectorResults,
+            keywordResults);
 
         if (_rerankerPort is not null)
         {
