@@ -20,7 +20,13 @@ public sealed class PdfDocumentExtractor : IDocumentExtractor
             await fileStream.CopyToAsync(documentStream, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
+            // CRITICAL FIX: CopyToAsync leaves the stream Position at the END.
+            // We must reset it to 0 before attempting to read the magic bytes.
+            documentStream.Position = 0;
+
             ValidatePdfSignature(documentStream, fileName);
+            
+            // Reset again to 0 so PdfPig can read the entire document from the beginning
             documentStream.Position = 0;
 
             using var pdfDocument = PdfDocument.Open(documentStream);

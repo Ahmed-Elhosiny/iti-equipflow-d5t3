@@ -34,6 +34,11 @@ public class DatabaseSeeder
         _logger.LogInformation("Running database migrations...");
         await _context.Database.MigrateAsync(cancellationToken);
 
+        // CRITICAL FIX: Ensure the pgvector extension is enabled in the newly created database.
+        // Extensions are per-database in Postgres, so dropping/recreating the DB removes it.
+        _logger.LogInformation("Ensuring pgvector extension is enabled...");
+        await _context.Database.ExecuteSqlRawAsync("CREATE EXTENSION IF NOT EXISTS vector;", cancellationToken);
+
         _logger.LogInformation("Seeding database...");
         await SeedAsync(cancellationToken);
     }

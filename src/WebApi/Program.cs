@@ -152,9 +152,7 @@ builder.Services.AddScoped<IEquipmentRepository, EquipmentRepository>();
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddScoped<IDocumentChunkRepository, DocumentChunkRepository>();
 builder.Services.AddSingleton<ITextChunker, StructureAwareTextChunker>();
-// OpenRouter (and most free tiers) only support Chat Completions, not Embeddings.
-// We force the MockEmbeddingAdapter for the MVP to prevent 404 crashes during RAG retrieval.
-builder.Services.AddSingleton<IEmbeddingPort, MockEmbeddingAdapter>();
+builder.Services.AddSingleton<IEmbeddingPort, OllamaEmbeddingAdapter>();
 builder.Services.AddScoped<PdfDocumentExtractor>();
 builder.Services.AddScoped<DocxDocumentExtractor>();
 // Route extraction dynamically according to file extension (FR-1)

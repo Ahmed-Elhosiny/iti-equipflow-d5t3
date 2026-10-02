@@ -38,7 +38,7 @@ public sealed class DocumentChunkConfiguration : IEntityTypeConfiguration<Docume
                     ? ReadOnlyMemory<float>.Empty
                     : new ReadOnlyMemory<float>(value.ToArray()))
             .IsRequired()
-            .HasColumnType("vector(1536)");
+            .HasColumnType("vector(1024)");
 
         builder.OwnsOne(chunk => chunk.Metadata, metadata =>
         {
