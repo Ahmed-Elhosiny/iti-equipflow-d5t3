@@ -19,6 +19,9 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
+using EquipFlow.Application.Ports;
+using EquipFlow.Infrastructure.AI;
+using Microsoft.Extensions.Hosting;
 
 namespace EquipFlow.WebApi.IntegrationTests;
 
@@ -86,6 +89,16 @@ public sealed class OrchestratorE2ETests : IClassFixture<EquipFlowWebApplication
             // ADD THIS: Bypass EF InMemory transaction limitations
             services.RemoveAll<EquipFlow.Application.Ports.ITransactionManager>();
             services.AddScoped<EquipFlow.Application.Ports.ITransactionManager, NoOpTransactionManager>();
+
+            // FIX 1: Replace Ollama with MockEmbeddingAdapter for CI.
+            // CI runners do not have Ollama running on localhost:11434.
+            services.RemoveAll<IEmbeddingPort>();
+            services.AddSingleton<IEmbeddingPort, MockEmbeddingAdapter>();
+
+            // FIX 2: Disable all Background Services in tests.
+            // This prevents BudgetResetBackgroundService from trying to connect 
+            // to a real Postgres DB and crashing the test host logs.
+            services.RemoveAll<IHostedService>();
         });
     }
 }

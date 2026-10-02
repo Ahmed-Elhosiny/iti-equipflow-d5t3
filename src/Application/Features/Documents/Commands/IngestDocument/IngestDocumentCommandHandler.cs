@@ -78,10 +78,13 @@ public sealed class IngestDocumentCommandHandler
             {
                 var chunkResult = chunks[index];
                 
-                // Inject the extracted section into the chunk's metadata
-                var chunkMetadata = chunkResult.Section is not null 
-                    ? request.Metadata with { Section = chunkResult.Section } 
-                    : request.Metadata;
+                // CRITICAL FIX: Always create a new instance of the owned type using 'with'.
+                // Sharing the same reference between Document and DocumentChunk violates 
+                // EF Core's exclusive ownership rules for [Owned] types and corrupts the Change Tracker.
+                var chunkMetadata = request.Metadata with 
+                { 
+                    Section = chunkResult.Section ?? request.Metadata.Section 
+                };
 
                 var chunk = new DocumentChunk(
                     document.Id,

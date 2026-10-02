@@ -9,7 +9,7 @@ public sealed class EquipFlowDbContextFactory : IDesignTimeDbContextFactory<Equi
     public EquipFlowDbContext CreateDbContext(string[] args)
     {
         var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING") 
-            ?? "Host=localhost;Database=equipflow_design_time";
+    ?? "Host=localhost;Port=5432;Database=equipflow;Username=equipflow;Password=equipflow_password";
             
         if (string.IsNullOrEmpty(connectionString))
         {
