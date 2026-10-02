@@ -25,7 +25,7 @@ public sealed class ValidateBudgetExecutor(
     /// <summary>
     /// Gets the name of the tool handled by this executor.
     /// </summary>
-    public string ToolName => "validate_budget";
+    public string ToolName => "ValidateBudget";
 
     /// <summary>
     /// Deserializes the tool arguments and validates the estimated cost with the Cost Governor.
