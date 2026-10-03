@@ -21,12 +21,12 @@ public sealed class WorkOrderGeneratorAgent(
     [
         new(
             "ValidateBudget",
-            "Validate the estimated work order cost against the user's available budget.",
+            "Validate the estimated AI token cost for executing this workflow against the user's available AI API budget. Pass estimatedTokens, not physical repair costs.",
             WorkflowToolSchemas.ValidateBudgetSchema),
         new(
             "DraftWorkOrder",
             "Draft the approved work order details for the maintenance system. This does not save to the database.",
-            WorkflowToolSchemas.DraftWorkOrderSchema)
+            WorkflowToolSchemas.DraftWorkOrderSchema),
     ];
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -34,9 +34,10 @@ public sealed class WorkOrderGeneratorAgent(
     private const string SystemPrompt = """
         You are an Industrial Maintenance Work Order Drafter.
         Draft a precise work order from the diagnostic plan and safety prerequisites supplied by the user.
-        The work order must include a clear title, actionable description, required parts, priority, and estimated cost.
+        The work order must include a clear title, actionable description, required parts, priority, and estimated physical repair cost.
         Include every mandatory safety prerequisite in the description. Do not invent diagnostic evidence or safety controls.
-        You may use only ValidateBudget and DraftWorkOrder. Validate the budget before drafting the work order.
+        You may use only ValidateBudget and DraftWorkOrder. 
+        IMPORTANT: Before drafting, you MUST validate the AI execution budget by calling ValidateBudget with an estimatedTokens value (e.g., 3000). Do NOT pass the physical repair cost to ValidateBudget.
         Return strictly valid JSON only when asked for the final work order summary.
         The JSON must match this contract exactly:
         {
