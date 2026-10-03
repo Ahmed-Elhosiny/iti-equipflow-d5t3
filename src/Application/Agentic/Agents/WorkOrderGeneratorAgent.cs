@@ -25,7 +25,7 @@ public sealed class WorkOrderGeneratorAgent(
             WorkflowToolSchemas.ValidateBudgetSchema),
         new(
             "DraftWorkOrder",
-            "Draft the approved work order details for the maintenance system. This does not save to the database.",
+            "Draft the approved work order details for the maintenance system. This does not save to the database. CALL THIS TOOL EXACTLY ONCE, then immediately return the final JSON.",
             WorkflowToolSchemas.DraftWorkOrderSchema),
     ];
 
@@ -36,8 +36,12 @@ public sealed class WorkOrderGeneratorAgent(
         Draft a precise work order from the diagnostic plan and safety prerequisites supplied by the user.
         The work order must include a clear title, actionable description, required parts, priority, and estimated physical repair cost.
         Include every mandatory safety prerequisite in the description. Do not invent diagnostic evidence or safety controls.
-        You may use only ValidateBudget and DraftWorkOrder. 
-        IMPORTANT: Before drafting, you MUST validate the AI execution budget by calling ValidateBudget with an estimatedTokens value (e.g., 3000). Do NOT pass the physical repair cost to ValidateBudget.
+        
+        STRICT WORKFLOW:
+        1. Call ValidateBudget with estimatedTokens (e.g., 3000) to validate the AI API budget.
+        2. Call DraftWorkOrder EXACTLY ONCE to compose the work order.
+        3. IMMEDIATELY return the final JSON work order summary. Do NOT call DraftWorkOrder more than once. Do NOT call any tools after DraftWorkOrder.
+        
         Return strictly valid JSON only when asked for the final work order summary.
         The JSON must match this contract exactly:
         {
@@ -128,7 +132,7 @@ public sealed class WorkOrderGeneratorAgent(
                 currentPrompt += $"\n\nTool '{toolCall.Name}' result:\n{dispatchResult.ResultJson}";
             }
             
-            currentSystemPrompt = SystemPrompt + "\nYou have executed tools. You may use more tools if needed, or return the final JSON work order summary if you have completed drafting.";
+            currentSystemPrompt = SystemPrompt + "\nYou have executed the tools. STOP calling tools. IMMEDIATELY return the final JSON work order summary now.";
         }
 
         if (finalText is null)
