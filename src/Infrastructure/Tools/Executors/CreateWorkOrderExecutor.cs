@@ -3,6 +3,7 @@ using EquipFlow.Application.Ports;
 using EquipFlow.Application.Tools.Definitions;
 using EquipFlow.Application.Tools.Ports;
 using EquipFlow.Application.WorkOrders.Commands;
+using EquipFlow.Domain;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -42,7 +43,20 @@ public sealed class CreateWorkOrderExecutor(
             }
 
             // 1. Resolve Equipment details for the Work Order
-            var equipment = await equipmentRepository.GetByIdAsync(createRequest.EquipmentId, cancellationToken);
+            Equipment? equipment = null;
+
+            if (Guid.TryParse(createRequest.EquipmentId, out var parsedId))
+            {
+                equipment = await equipmentRepository.GetByIdAsync(parsedId, cancellationToken);
+            }
+
+            if (equipment is null)
+            {
+                var allEquipment = await equipmentRepository.GetAllAsync(null, cancellationToken);
+                equipment = allEquipment.FirstOrDefault(e => 
+                    e.Name.Equals(createRequest.EquipmentId, StringComparison.OrdinalIgnoreCase));
+            }
+
             var equipmentName = equipment?.Name ?? "Unknown Equipment";
             var assetNumber = equipment?.SerialNumber;
 

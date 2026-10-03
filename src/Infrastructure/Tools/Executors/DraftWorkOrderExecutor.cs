@@ -2,6 +2,7 @@ using System.Text.Json;
 using EquipFlow.Application.Ports;
 using EquipFlow.Application.Tools.Definitions;
 using EquipFlow.Application.Tools.Ports;
+using EquipFlow.Domain;
 using Microsoft.Extensions.Logging;
 
 namespace EquipFlow.Infrastructure.Tools.Executors;
@@ -39,7 +40,20 @@ public sealed class DraftWorkOrderExecutor(
             }
 
             // 1. Resolve Equipment details to ensure the equipment exists
-            var equipment = await equipmentRepository.GetByIdAsync(draftRequest.EquipmentId, cancellationToken);
+            Equipment? equipment = null;
+
+            if (Guid.TryParse(draftRequest.EquipmentId, out var parsedId))
+            {
+                equipment = await equipmentRepository.GetByIdAsync(parsedId, cancellationToken);
+            }
+
+            if (equipment is null)
+            {
+                var allEquipment = await equipmentRepository.GetAllAsync(null, cancellationToken);
+                equipment = allEquipment.FirstOrDefault(e => 
+                    e.Name.Equals(draftRequest.EquipmentId, StringComparison.OrdinalIgnoreCase));
+            }
+
             if (equipment is null)
             {
                  return new ToolDispatchResult(
