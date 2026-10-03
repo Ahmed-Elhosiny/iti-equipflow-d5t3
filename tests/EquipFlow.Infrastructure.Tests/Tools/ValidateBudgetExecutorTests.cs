@@ -31,7 +31,7 @@ public sealed class ValidateBudgetExecutorTests
         var executor = CreateExecutor(governor);
 
         var result = await executor.ExecuteAsync(CreateRequest(
-            JsonSerializer.Serialize(new ValidateBudgetRequest(Guid.NewGuid(), EstimatedTokens: 3000))));
+            JsonSerializer.Serialize(new ValidateBudgetRequest("P-101", EstimatedTokens: 3000)))); // CHANGED: Guid -> string
 
         Assert.True(result.Succeeded);
         Assert.Equal(ToolDispatchStatus.Success, result.Status);
@@ -56,7 +56,7 @@ public sealed class ValidateBudgetExecutorTests
         var executor = CreateExecutor(governor);
 
         var result = await executor.ExecuteAsync(CreateRequest(
-            JsonSerializer.Serialize(new ValidateBudgetRequest(Guid.NewGuid(), EstimatedTokens: 3000))));
+            JsonSerializer.Serialize(new ValidateBudgetRequest("P-101", EstimatedTokens: 3000)))); // CHANGED: Guid -> string
 
         Assert.True(result.Succeeded);
         Assert.Equal(ToolDispatchStatus.Success, result.Status);
@@ -82,7 +82,7 @@ public sealed class ValidateBudgetExecutorTests
         var executor = CreateExecutor(governor);
 
         var result = await executor.ExecuteAsync(CreateRequest(
-            JsonSerializer.Serialize(new ValidateBudgetRequest(Guid.NewGuid(), EstimatedTokens: 3000))));
+            JsonSerializer.Serialize(new ValidateBudgetRequest("P-101", EstimatedTokens: 3000)))); // CHANGED: Guid -> string
 
         Assert.False(result.Succeeded);
         Assert.Equal(ToolDispatchStatus.ExecutorFailed, result.Status);

@@ -4,7 +4,7 @@ namespace EquipFlow.Application.Tools.Definitions;
 /// Request for drafting a work order.
 /// </summary>
 public sealed record DraftWorkOrderRequest(
-    Guid EquipmentId,
+    string EquipmentId, // CHANGED: Guid -> string to support alphanumeric tags like "P-101"
     string Title,
     string Description,
     decimal EstimatedCost,
@@ -20,7 +20,7 @@ public sealed record DraftWorkOrderResponse(bool Success, string Status, Guid? W
 /// Request for creating and persisting a work order (Gated Write Tool - TL-007).
 /// </summary>
 public sealed record CreateWorkOrderRequest(
-    Guid EquipmentId,
+    string EquipmentId, // CHANGED: Guid -> string
     string Title,
     string Description,
     decimal EstimatedCost,
@@ -36,7 +36,7 @@ public sealed record CreateWorkOrderResponse(bool Success, string Status, Guid? 
 /// Request for validating an estimated work order cost with the Cost Governor.
 /// </summary>
 public sealed record ValidateBudgetRequest(
-  Guid EquipmentId,
+  string EquipmentId, // CHANGED: Guid -> string
   int? EstimatedTokens = null,
   decimal? EstimatedCost = null);
 
@@ -89,8 +89,7 @@ public static class WorkflowToolSchemas
           "type": "object",
           "properties": {
             "equipmentId": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "title": {
               "type": "string"
@@ -135,8 +134,7 @@ public static class WorkflowToolSchemas
           "type": "object",
           "properties": {
             "equipmentId": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "title": {
               "type": "string"
@@ -181,8 +179,7 @@ public static class WorkflowToolSchemas
           "type": "object",
           "properties": {
             "equipmentId": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "estimatedTokens": {
               "type": "integer",
