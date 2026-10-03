@@ -36,9 +36,8 @@ public sealed record CreateWorkOrderResponse(bool Success, string Status, Guid? 
 /// Request for validating an estimated work order cost with the Cost Governor.
 /// </summary>
 public sealed record ValidateBudgetRequest(
-  string EquipmentId, // CHANGED: Guid -> string
-  int? EstimatedTokens = null,
-  decimal? EstimatedCost = null);
+  string EquipmentId,
+  int EstimatedTokens);
 
 /// <summary>
 /// Response from the Cost Governor budget validation.
@@ -184,20 +183,9 @@ public static class WorkflowToolSchemas
             "estimatedTokens": {
               "type": "integer",
               "minimum": 1
-            },
-            "estimatedCost": {
-              "type": "number",
-              "minimum": 0
             }
           },
-          "required": ["equipmentId"],
-          "oneOf": [
-            { "required": ["estimatedTokens"] },
-            { "required": ["estimatedCost"] }
-          ],
-          "not": {
-            "required": ["estimatedTokens", "estimatedCost"]
-          }
+          "required": ["equipmentId", "estimatedTokens"]
         }
         """;
 

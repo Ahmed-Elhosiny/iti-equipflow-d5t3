@@ -38,7 +38,7 @@ public sealed class ValidateBudgetExecutor(
         CancellationToken cancellationToken = default) =>
         ExecuteAsync(arguments, null, cancellationToken);
 
-    private async Task<ToolExecutionResult> ExecuteAsync(
+        private async Task<ToolExecutionResult> ExecuteAsync(
         JsonElement arguments,
         string? userId,
         CancellationToken cancellationToken)
@@ -62,35 +62,11 @@ public sealed class ValidateBudgetExecutor(
                     "The validate_budget invocation is missing a user context.");
             }
 
-            CostGovernorResult budgetResult;
-            if (request.EstimatedTokens is int estimatedTokens)
-            {
-                budgetResult = await costGovernor.EstimateAndReserveAsync(
-                    userId,
-                    estimatedTokens,
-                    openAiOptions.Value.Model, // FIXED: Pass configured model name instead of hardcoded decimal
-                    cancellationToken);
-            }
-            else if (request.EstimatedCost is decimal estimatedCost)
-            {
-                var budgetCheck = await costGovernor.CheckBudgetAsync(
-                    userId,
-                    new EstimatedCost(estimatedCost, 0, 0),
-                    cancellationToken);
-
-                return new ToolExecutionResult(
-                    true,
-                    JsonSerializer.Serialize(new ValidateBudgetResponse(
-                        budgetCheck.IsAllowed,
-                        budgetCheck.IsAllowed ? estimatedCost : 0,
-                        budgetCheck.Reason)),
-                    null);
-            }
-            else
-            {
-                throw new ValidationException(
-                    "Exactly one of estimatedTokens or estimatedCost must be provided.");
-            }
+            var budgetResult = await costGovernor.EstimateAndReserveAsync(
+                userId,
+                request.EstimatedTokens,
+                openAiOptions.Value.Model,
+                cancellationToken);
 
             return new ToolExecutionResult(
                 true,
