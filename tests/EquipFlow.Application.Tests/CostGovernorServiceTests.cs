@@ -258,6 +258,9 @@ public sealed class CostGovernorServiceTests
             Task.CompletedTask;
         public Task<IEnumerable<UserBudget>> GetBudgetsNeedingResetAsync(DateTimeOffset currentDate, CancellationToken ct) =>
         Task.FromResult<IEnumerable<UserBudget>>(Array.Empty<UserBudget>());
+
+        public Task<IEnumerable<UserBudget>> GetBudgetsWithStaleReservationsAsync(DateTimeOffset cutoffDate, CancellationToken ct) =>
+        Task.FromResult<IEnumerable<UserBudget>>(Array.Empty<UserBudget>());
     }
         private sealed class FakeRunSpendRepository : IRunSpendRepository
     {
@@ -265,6 +268,9 @@ public sealed class CostGovernorServiceTests
         
         public Task<IEnumerable<RunSpend>> GetByUserIdAsync(Guid userId, CancellationToken ct) =>
             Task.FromResult<IEnumerable<RunSpend>>(Array.Empty<RunSpend>());
+
+        public Task<IEnumerable<UserBudget>> GetBudgetsWithStaleReservationsAsync(DateTimeOffset cutoffDate, CancellationToken ct) =>
+        Task.FromResult<IEnumerable<UserBudget>>(Array.Empty<UserBudget>());
     }
        private sealed class ThrowingUserBudgetRepository : IUserBudgetRepository
     {
@@ -274,6 +280,8 @@ public sealed class CostGovernorServiceTests
         public Task AddAsync(UserBudget budget, CancellationToken cancellationToken) => throw new InvalidOperationException("DB down");
         public Task UpdateAsync(UserBudget budget, CancellationToken cancellationToken) => throw new InvalidOperationException("DB down");
         public Task<IEnumerable<UserBudget>> GetBudgetsNeedingResetAsync(DateTimeOffset currentDate, CancellationToken ct) => throw new InvalidOperationException("DB down");
+        public Task<IEnumerable<UserBudget>> GetBudgetsWithStaleReservationsAsync(DateTimeOffset cutoffDate, CancellationToken ct) => 
+        throw new InvalidOperationException("DB down");
     }
     
 }
