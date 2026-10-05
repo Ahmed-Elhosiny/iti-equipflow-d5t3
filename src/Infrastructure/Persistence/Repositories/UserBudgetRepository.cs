@@ -42,4 +42,12 @@ public sealed class UserBudgetRepository(EquipFlowDbContext context) : IUserBudg
     {
         await context.SaveChangesAsync(ct);
     }
+
+        public async Task<IEnumerable<UserBudget>> GetBudgetsWithStaleReservationsAsync(DateTimeOffset cutoffDate, CancellationToken ct)
+    {
+        return await context.UserBudgets
+            .Include(b => b.Reservations)
+            .Where(b => b.Reservations.Any(r => r.CreatedAt < cutoffDate.UtcDateTime))
+            .ToListAsync(ct);
+    }
 }

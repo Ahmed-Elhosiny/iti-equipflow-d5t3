@@ -172,6 +172,7 @@ builder.Services.AddScoped<EquipFlow.Application.Ports.IModelRouter, EquipFlow.I
 builder.Services.AddScoped<EquipFlow.Application.Ports.ITransactionManager, EquipFlow.Infrastructure.Persistence.EfTransactionManager>();
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
 builder.Services.AddHostedService<EquipFlow.Infrastructure.BackgroundServices.BudgetResetBackgroundService>();
+builder.Services.AddHostedService<EquipFlow.Infrastructure.BackgroundServices.DanglingReservationSweepService>();
 builder.Services.AddScoped<SequentialSupervisorOrchestrator>();
 builder.Services.AddRagSearchInfrastructure();
 builder.Services.AddScoped<EquipFlow.Application.Budget.Ports.IRunSpendRepository, EquipFlow.Infrastructure.Persistence.Repositories.RunSpendRepository>();
