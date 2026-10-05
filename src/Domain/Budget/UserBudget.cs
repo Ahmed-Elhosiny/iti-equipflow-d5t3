@@ -74,4 +74,18 @@ public class UserBudget
 
     private static DateTimeOffset CalculateNextResetDate(DateTimeOffset currentDate) =>
         new DateTimeOffset(currentDate.Year, currentDate.Month, 1, 0, 0, 0, TimeSpan.Zero).AddMonths(1);
+
+
+       public void CommitCapped(Guid reservationId, Money actualCost)
+    {
+        var reservation = _reservations.FirstOrDefault(item => item.Id == reservationId)
+            ?? throw new InvalidOperationException($"Budget reservation with id {reservationId} was not found.");
+
+        var availableForActual = TotalLimit - ConsumedAmount - (ReservedAmount - reservation.EstimatedCost);
+        var amountToCommit = actualCost > availableForActual ? availableForActual : actualCost;
+        if (amountToCommit.Amount < 0) amountToCommit = Money.FromDecimal(0);
+
+        _reservations.Remove(reservation);
+        ConsumedAmount += amountToCommit;
+    }
 }
