@@ -9,7 +9,8 @@ public sealed record AgentRunDto(
     string? Status,
     DateTime StartedAt,
     DateTime? EndedAt,
-    List<AgentEventDto> Events);
+    List<AgentEventDto> Events,
+    decimal TotalCostUsd);
 
 public sealed record AgentEventDto(
     string EventType,

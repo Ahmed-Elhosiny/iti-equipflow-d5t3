@@ -49,6 +49,33 @@ public sealed record AgentRunCompleted(
     string? OutputSummary)
     : AgentEventBase(CorrelationId, Timestamp, AgentName, StepIndex);
 
+
+/// <summary>
+/// Marks the beginning of an individual agent step within a workflow.
+/// </summary>
+public sealed record AgentStepStarted(
+    Guid CorrelationId,
+    DateTimeOffset Timestamp,
+    string AgentName,
+    int StepIndex,
+    string StepName)
+    : AgentEventBase(CorrelationId, Timestamp, AgentName, StepIndex);
+
+/// <summary>
+/// Marks the completion of an individual agent step with its outcome and duration.
+/// </summary>
+public sealed record AgentStepCompleted(
+    Guid CorrelationId,
+    DateTimeOffset Timestamp,
+    string AgentName,
+    int StepIndex,
+    string StepName,
+    bool Success,
+    long DurationMs,
+    string? ErrorMessage)
+    : AgentEventBase(CorrelationId, Timestamp, AgentName, StepIndex);
+
+    
 /// <summary>
 /// Records completed language-model usage and estimated cost for reconciliation and attribution.
 /// Satisfies OBS-002, CG-006, and CG-007.

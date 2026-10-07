@@ -65,7 +65,7 @@ public sealed class SequentialSupervisorOrchestrator(
 
         try
         {
-            // --- STEP 1: Symptom Matcher ---
+                        // --- STEP 1: Symptom Matcher ---
             var (symptomResult, step1Gov) = await ExecuteStepWithBudgetAsync(
                 symptomMatcher,
                 new SymptomMatchInput(request.SymptomDescription, request.EquipmentIdHint),
@@ -74,6 +74,7 @@ public sealed class SequentialSupervisorOrchestrator(
                 correlationId.ToString(),
                 eventCollector,
                 workflowToken,
+                stepIndex: 1,
                 semanticQuery: request.SymptomDescription);
 
             if (step1Gov?.Status == CostGovernorStatus.Cached)
@@ -85,7 +86,7 @@ public sealed class SequentialSupervisorOrchestrator(
 
             if (symptomResult.Error is not null)
             {
-                var fallbackResult = await TryRagFallbackAsync(request.SymptomDescription, symptomResult.Error, workflowToken);
+                var fallbackResult = await TryRagFallbackAsync(request.SymptomDescription, symptomResult.Error, eventCollector, workflowToken);
                 if (fallbackResult is not null)
                 {
                     finalStatus = AgentRunStatus.PartialSuccess;
@@ -108,11 +109,12 @@ public sealed class SequentialSupervisorOrchestrator(
                 resolvedUserId,
                 correlationId.ToString(),
                 eventCollector,
-                workflowToken);
+                workflowToken,
+                stepIndex: 2);
 
             if (diagnosticResult.Error is not null)
             {
-                var fallbackResult = await TryRagFallbackAsync(request.SymptomDescription, diagnosticResult.Error, workflowToken);
+                var fallbackResult = await TryRagFallbackAsync(request.SymptomDescription, diagnosticResult.Error, eventCollector, workflowToken);
                 if (fallbackResult is not null)
                 {
                     finalStatus = AgentRunStatus.PartialSuccess;
@@ -132,7 +134,8 @@ public sealed class SequentialSupervisorOrchestrator(
                 resolvedUserId,
                 correlationId.ToString(),
                 eventCollector,
-                workflowToken);
+                workflowToken,
+                stepIndex: 3);
 
             if (workOrderResult.Error is not null)
             {
@@ -190,7 +193,7 @@ public sealed class SequentialSupervisorOrchestrator(
         }
     }
 
-       private async Task<(AgentResult<TOutput> Result, CostGovernorResult? GovResult)> ExecuteStepWithBudgetAsync<TInput, TOutput>(
+        private async Task<(AgentResult<TOutput> Result, CostGovernorResult? GovResult)> ExecuteStepWithBudgetAsync<TInput, TOutput>(
         IAgent<TInput, TOutput> agent,
         TInput input,
         string stepInputText,
@@ -198,6 +201,7 @@ public sealed class SequentialSupervisorOrchestrator(
         string correlationId,
         RecordingAgentContext eventCollector,
         CancellationToken workflowToken,
+        int stepIndex,
         string? semanticQuery = null)
     {
         var estimatedTokens = tokenEstimator.EstimateTokens(stepInputText);
@@ -221,7 +225,7 @@ public sealed class SequentialSupervisorOrchestrator(
         eventCollector.ReservationId = reservation.ReservationId?.ToString();
 
         var eventsBefore = eventCollector.CollectedEvents.OfType<LlmCallCompleted>().Count();
-        var agentResult = await ExecuteStepAsync(agent, input, eventCollector, workflowToken);
+                var agentResult = await ExecuteStepAsync(agent, input, eventCollector, workflowToken, stepIndex);
 
         var stepLlmCalls = eventCollector.CollectedEvents.OfType<LlmCallCompleted>().Skip(eventsBefore).ToArray();
         
@@ -252,7 +256,7 @@ public sealed class SequentialSupervisorOrchestrator(
         return (agentResult, reservation);
     }
 
-    private async Task<WorkflowResult?> TryRagFallbackAsync(string symptomDescription, string originalError, CancellationToken cancellationToken)
+        private async Task<WorkflowResult?> TryRagFallbackAsync(string symptomDescription, string originalError, RecordingAgentContext eventCollector, CancellationToken cancellationToken)
     {
         try
         {
@@ -264,6 +268,32 @@ public sealed class SequentialSupervisorOrchestrator(
                 return null;
             }
 
+            var correlationId = Guid.TryParse(eventCollector.CorrelationId, out var parsed) ? parsed : Guid.NewGuid();
+            
+            foreach (var result in searchResult.Results)
+            {
+                // Map SearchResult to CitationAttached safely using reflection to avoid compile errors 
+                // if your SearchResult record uses slightly different property names (e.g. DocumentId vs SourceDocument).
+                var chunkId = result.GetType().GetProperty("ChunkId")?.GetValue(result)?.ToString() ?? "unknown";
+                var sourceDoc = result.GetType().GetProperty("SourceDocument")?.GetValue(result)?.ToString() 
+                             ?? result.GetType().GetProperty("DocumentTitle")?.GetValue(result)?.ToString() 
+                             ?? result.GetType().GetProperty("DocumentId")?.GetValue(result)?.ToString() ?? "unknown";
+                var score = (double)(result.GetType().GetProperty("Score")?.GetValue(result) ?? result.GetType().GetProperty("RelevanceScore")?.GetValue(result) ?? 0.0);
+                var excerpt = result.GetType().GetProperty("Excerpt")?.GetValue(result)?.ToString() 
+                           ?? result.GetType().GetProperty("Text")?.GetValue(result)?.ToString() 
+                           ?? result.GetType().GetProperty("Content")?.GetValue(result)?.ToString() ?? "";
+
+                eventCollector.Add(new CitationAttached(
+                    correlationId,
+                    DateTimeOffset.UtcNow,
+                    "RAGFallback",
+                    0,
+                    chunkId,
+                    sourceDoc,
+                    score,
+                    excerpt));
+            }
+
             return WorkflowResult.Fallback(searchResult.Results, originalError);
         }
         catch (Exception ex)
@@ -273,32 +303,42 @@ public sealed class SequentialSupervisorOrchestrator(
         }
     }
 
-    private async Task<AgentResult<TOutput>> ExecuteStepAsync<TInput, TOutput>(
+       private async Task<AgentResult<TOutput>> ExecuteStepAsync<TInput, TOutput>(
         IAgent<TInput, TOutput> agent,
         TInput input,
-        IAgentContext context,
-        CancellationToken workflowToken)
+        RecordingAgentContext eventCollector,
+        CancellationToken workflowToken,
+        int stepIndex)
     {
+        var correlationId = Guid.TryParse(eventCollector.CorrelationId, out var parsed) ? parsed : Guid.NewGuid();
+        var stepName = agent.Name;
+
+        eventCollector.Add(new AgentStepStarted(
+            correlationId,
+            DateTimeOffset.UtcNow,
+            stepName,
+            stepIndex,
+            stepName));
+
         using var stepTimeout = CancellationTokenSource.CreateLinkedTokenSource(workflowToken);
         stepTimeout.CancelAfter(AgentTimeout);
         var stopwatch = Stopwatch.StartNew();
 
-        logger.LogInformation(
-            "AgentRunStarted {EventName} {CorrelationId} {AgentName}",
-            "AgentRunStarted",
-            context.CorrelationId,
-            agent.Name);
-
         try
         {
-            var result = await agent.ExecuteAsync(input, context, stepTimeout.Token);
-            logger.LogInformation(
-                "AgentRunCompleted {EventName} {CorrelationId} {AgentName} {Succeeded} {ElapsedMilliseconds}",
-                "AgentRunCompleted",
-                context.CorrelationId,
-                agent.Name,
-                result.Error is null,
-                stopwatch.ElapsedMilliseconds);
+            var result = await agent.ExecuteAsync(input, eventCollector, stepTimeout.Token);
+            var success = result.Error is null;
+            
+            eventCollector.Add(new AgentStepCompleted(
+                correlationId,
+                DateTimeOffset.UtcNow,
+                stepName,
+                stepIndex,
+                stepName,
+                success,
+                stopwatch.ElapsedMilliseconds,
+                result.Error));
+
             return result;
         }
         catch (OperationCanceledException) when (stepTimeout.IsCancellationRequested)
@@ -306,26 +346,31 @@ public sealed class SequentialSupervisorOrchestrator(
             var timedOut = workflowToken.IsCancellationRequested
                 ? "Agent execution stopped because the workflow timed out."
                 : "Agent execution timed out after 45 seconds.";
-            logger.LogWarning(
-                "AgentRunCompleted {EventName} {CorrelationId} {AgentName} {Succeeded} {ElapsedMilliseconds} {Error}",
-                "AgentRunCompleted",
-                context.CorrelationId,
-                agent.Name,
+                
+            eventCollector.Add(new AgentStepCompleted(
+                correlationId,
+                DateTimeOffset.UtcNow,
+                stepName,
+                stepIndex,
+                stepName,
                 false,
                 stopwatch.ElapsedMilliseconds,
-                timedOut);
+                timedOut));
+
             return new AgentResult<TOutput>(default!, [], false, timedOut);
         }
         catch (Exception exception)
         {
-            logger.LogError(
-                exception,
-                "AgentRunCompleted {EventName} {CorrelationId} {AgentName} {Succeeded} {ElapsedMilliseconds}",
-                "AgentRunCompleted",
-                context.CorrelationId,
-                agent.Name,
+            eventCollector.Add(new AgentStepCompleted(
+                correlationId,
+                DateTimeOffset.UtcNow,
+                stepName,
+                stepIndex,
+                stepName,
                 false,
-                stopwatch.ElapsedMilliseconds);
+                stopwatch.ElapsedMilliseconds,
+                exception.Message));
+
             return new AgentResult<TOutput>(default!, [], false, exception.Message);
         }
     }

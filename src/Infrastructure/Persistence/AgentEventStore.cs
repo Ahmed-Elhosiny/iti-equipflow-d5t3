@@ -102,6 +102,8 @@ public sealed class AgentEventStore : IAgentEventStore
             nameof(LlmCallCompleted) => JsonSerializer.Deserialize<LlmCallCompleted>(entity.Payload),
             nameof(ToolInvoked) => JsonSerializer.Deserialize<ToolInvoked>(entity.Payload),
             nameof(CitationAttached) => JsonSerializer.Deserialize<CitationAttached>(entity.Payload),
+            nameof(AgentStepStarted) => JsonSerializer.Deserialize<AgentStepStarted>(entity.Payload),
+            nameof(AgentStepCompleted) => JsonSerializer.Deserialize<AgentStepCompleted>(entity.Payload),
             _ => throw new InvalidOperationException(
                 $"Unsupported agent event type '{entity.EventType}'.")
         };
