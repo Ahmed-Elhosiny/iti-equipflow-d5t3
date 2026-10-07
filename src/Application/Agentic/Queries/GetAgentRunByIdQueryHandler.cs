@@ -30,13 +30,15 @@ public sealed class GetAgentRunByIdQueryHandler(IAgentEventStore eventStore)
         }
 
         var completedEvent = events.OfType<AgentRunCompleted>().FirstOrDefault();
+        var totalCostUsd = events.OfType<LlmCallCompleted>().Sum(e => e.EstimatedCostUsd);
 
         return new AgentRunDto(
             request.CorrelationId,
             completedEvent?.Status.ToString(),
             (startedEvent ?? events[0]).Timestamp.UtcDateTime,
             completedEvent?.Timestamp.UtcDateTime,
-            events.Select(ToDto).ToList());
+            events.Select(ToDto).ToList(),
+            totalCostUsd); 
     }
 
     private static AgentEventDto ToDto(AgentEventBase @event)
