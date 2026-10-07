@@ -141,6 +141,35 @@ public sealed class CostGovernorEvalTests : IClassFixture<CostGovernorWebApplica
         var repository = factory.Services.GetRequiredService<TestUserBudgetRepository>();
         return (await repository.GetByUserIdAsync(userId, CancellationToken.None))!;
     }
+        [Fact]
+    public async Task OverBudgetCompletion_CapsCommitAndReleasesReservation()
+    {
+        var userId = await SeedBudgetAsync(0.01m); 
+        
+        var result = await ExecuteBillableRequestAsync(userId, 1000, "gpt-4o-mini", () => { });
+        Assert.Equal(CostGovernorStatus.Reserved, result.Status);
+        
+        await using var scope = factory.Services.CreateAsyncScope();
+        var governor = scope.ServiceProvider.GetRequiredService<ICostGovernor>();
+        
+        // Actual usage that results in cost > budget limit (0.01)
+        // gpt-4o-mini: 0.00015 prompt, 0.0006 completion. 
+        // 10000 prompt (0.0015) + 15000 completion (0.009) = 0.0105 > 0.01
+        var actualUsage = new EquipFlow.Domain.Budget.ValueObjects.TokenUsage(10000, 15000); 
+        
+        var reconciled = await governor.ReconcileAsync(
+            userId.ToString(), 
+            result.ReservationId!.Value.ToString(), 
+            actualUsage, 
+            "gpt-4o-mini");
+
+        Assert.True(reconciled);
+
+        var budget = await ReadBudgetAsync(userId);
+        Assert.Equal(0m, budget.ReservedAmount.Amount); // Σ(active reservations) == 0
+        Assert.Equal(0.01m, budget.ConsumedAmount.Amount); // Capped at limit
+        Assert.Equal(0m, budget.AvailableAmount.Amount);
+    }
 }
 
 public sealed class CostGovernorWebApplicationFactory : WebApplicationFactory<Program>
@@ -197,6 +226,13 @@ public sealed class TestUserBudgetRepository : IUserBudgetRepository
     }
     public Task<IEnumerable<UserBudget>> GetBudgetsNeedingResetAsync(DateTimeOffset currentDate, CancellationToken ct) =>
         Task.FromResult<IEnumerable<UserBudget>>(Array.Empty<UserBudget>());
+    public Task<IEnumerable<UserBudget>> GetBudgetsWithStaleReservationsAsync(DateTimeOffset cutoffDate, CancellationToken ct)
+    {
+        var staleBudgets = budgets.Values
+            .Where(b => b.Reservations.Any(r => r.CreatedAt < cutoffDate.UtcDateTime))
+            .ToList();
+        return Task.FromResult<IEnumerable<UserBudget>>(staleBudgets);
+    }
 
 }
 public sealed class NoOpTransactionManager : EquipFlow.Application.Ports.ITransactionManager

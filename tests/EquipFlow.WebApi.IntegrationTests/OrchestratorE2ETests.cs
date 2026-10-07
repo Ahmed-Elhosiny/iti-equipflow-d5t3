@@ -281,6 +281,9 @@ public sealed class InMemoryUserBudgetRepository : IUserBudgetRepository
     }
     public Task<IEnumerable<UserBudget>> GetBudgetsNeedingResetAsync(DateTimeOffset currentDate, CancellationToken ct) =>
         Task.FromResult<IEnumerable<UserBudget>>(Array.Empty<UserBudget>());
+
+       public Task<IEnumerable<UserBudget>> GetBudgetsWithStaleReservationsAsync(DateTimeOffset cutoffDate, CancellationToken ct) =>
+        Task.FromResult<IEnumerable<UserBudget>>(Array.Empty<UserBudget>());
 }
 
 public sealed class TestAuthHandler(

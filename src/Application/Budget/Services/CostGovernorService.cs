@@ -110,8 +110,8 @@ public sealed class CostGovernorService(
     private static Money EstimateCost(int estimatedTokens, decimal pricePerThousandTokens) =>
         Money.FromDecimal(estimatedTokens / 1000m * pricePerThousandTokens * SafetyMargin);
 
-        public async Task<bool> ReconcileAsync(
-        string userId, // <-- ADDED
+            public async Task<bool> ReconcileAsync(
+        string userId,
         string reservationId,
         EquipFlow.Domain.Budget.ValueObjects.TokenUsage actualUsage,
         string modelUsed,
@@ -119,11 +119,10 @@ public sealed class CostGovernorService(
         CancellationToken cancellationToken = default)
     {
         if (!Guid.TryParse(reservationId, out var parsedReservationId)) return false;
-        var parsedUserId = ParseUserId(userId); // <-- ADDED
+        var parsedUserId = ParseUserId(userId);
 
         try
         {
-            // ELIMINATED FULL-TABLE SCAN: Fetch budget directly using userId with pessimistic lock
             await using var uow = await transactionManager.BeginTransactionAsync(cancellationToken);
             var lockedBudget = await userBudgetRepository.GetByUserIdForUpdateAsync(parsedUserId, cancellationToken);
                 
@@ -149,11 +148,13 @@ public sealed class CostGovernorService(
 
             if (actualCost > reservation.EstimatedCost && lockedBudget.AvailableAmount < actualCost - reservation.EstimatedCost)
             {
-                logger.LogWarning("Unable to reconcile reservation {ReservationId}: insufficient budget for extra cost.", reservationId);
-                return false;
+                logger.LogWarning("Reconciling reservation {ReservationId}: insufficient budget for extra cost. Capping commit to available limit.", reservationId);
+                lockedBudget.CommitCapped(parsedReservationId, actualCost);
             }
-
-            lockedBudget.Commit(parsedReservationId, actualCost);
+            else
+            {
+                lockedBudget.Commit(parsedReservationId, actualCost);
+            }
             
             if (!string.IsNullOrWhiteSpace(runId) && Guid.TryParse(runId, out var parsedRunId))
             {
@@ -174,7 +175,6 @@ public sealed class CostGovernorService(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // FAIL-CLOSED: Log the error and return false to prevent partial ledger updates
             logger.LogError(ex, "Budget store unavailable during reconciliation for reservation {ReservationId}. Failing closed.", reservationId);
             return false;
         }

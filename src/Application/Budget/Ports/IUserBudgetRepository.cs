@@ -10,4 +10,5 @@ public interface IUserBudgetRepository
     Task<IEnumerable<UserBudget>> GetBudgetsNeedingResetAsync(DateTimeOffset currentDate, CancellationToken ct);
     Task AddAsync(UserBudget budget, CancellationToken ct);
     Task UpdateAsync(UserBudget budget, CancellationToken ct);
+    Task<IEnumerable<UserBudget>> GetBudgetsWithStaleReservationsAsync(DateTimeOffset cutoffDate, CancellationToken ct);
 }
