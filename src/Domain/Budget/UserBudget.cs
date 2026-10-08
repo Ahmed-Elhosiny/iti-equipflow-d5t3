@@ -88,4 +88,8 @@ public class UserBudget
         _reservations.Remove(reservation);
         ConsumedAmount += amountToCommit;
     }
+    public void IncreaseLimit(Money amount)
+    {
+        TotalLimit += amount;
+    }
 }
