@@ -7,6 +7,8 @@ using EquipFlow.Domain.ValueObjects;
 using EquipFlow.Application.Ports;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
+using System.Data;
 
 namespace EquipFlow.Infrastructure.Persistence;
 
@@ -35,9 +37,19 @@ public class DatabaseSeeder
         await _context.Database.MigrateAsync(cancellationToken);
 
         // CRITICAL FIX: Ensure the pgvector extension is enabled in the newly created database.
-        // Extensions are per-database in Postgres, so dropping/recreating the DB removes it.
         _logger.LogInformation("Ensuring pgvector extension is enabled...");
         await _context.Database.ExecuteSqlRawAsync("CREATE EXTENSION IF NOT EXISTS vector;", cancellationToken);
+
+        // >>> ADD THIS BLOCK: Reload Npgsql type mappings <<<
+        // Npgsql caches DB schema on first connect. We must reload it so it recognizes the new 'vector' type.
+        var dbConnection = _context.Database.GetDbConnection();
+        if (dbConnection is NpgsqlConnection npgsqlConn)
+        {
+            if (dbConnection.State != ConnectionState.Open)
+                await dbConnection.OpenAsync(cancellationToken);
+            await npgsqlConn.ReloadTypesAsync();
+        }
+        // >>> END ADD BLOCK <<<
 
         _logger.LogInformation("Seeding database...");
         await SeedAsync(cancellationToken);
