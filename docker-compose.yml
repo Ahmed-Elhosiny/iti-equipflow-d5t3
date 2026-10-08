@@ -9,13 +9,37 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U equipflow -d equipflow"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
+
+  # NEW: Canonical Ollama service for offline-first embeddings
+  ollama:
+    image: ollama/ollama:latest
+    container_name: equipflow-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
+  # NEW: Init container to pull the required 1024-dim model
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for Ollama server to start..."
+        sleep 5
+        echo "Pulling mxbai-embed-large (1024 dims)..."
+        ollama pull mxbai-embed-large
+    restart: "no"
 
   api:
     build:
@@ -28,25 +52,25 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:5000
       ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=equipflow;Username=equipflow;Password=equipflow_password
-      # Override Ollama URL to use Docker service name
-      Llm__Ollama__BaseUrl: http://host.docker.internal:11434
+      # FIXED: Point to the internal Ollama service, not host.docker.internal
+      Llm__Ollama__BaseUrl: http://ollama:11434
+      Llm__Ollama__EmbeddingModel: mxbai-embed-large
+      DefaultLlmProvider: Ollama
     ports:
       - "5000:5000"
     depends_on:
       db:
         condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 20s # Increased to allow Ollama model loading time
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
-  # Seed service - runs once to populate database with demo data
-  # Usage: docker compose run --rm seed
   seed:
     build:
       context: .
@@ -58,14 +82,16 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=equipflow;Username=equipflow;Password=equipflow_password
+      Llm__Ollama__BaseUrl: http://ollama:11434
       SEED_MODE: "true"
     depends_on:
       db:
         condition: service_healthy
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      ollama-init:
+        condition: service_completed_successfully
     profiles:
       - tools
 
 volumes:
   postgres_data:
+  ollama_data:
