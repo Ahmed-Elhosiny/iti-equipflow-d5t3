@@ -115,9 +115,23 @@ public class MockLlmProvider : ILLMProvider
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (request.SystemPrompt?.Contains("Symptom Matcher", StringComparison.OrdinalIgnoreCase) == true)
+                if (request.SystemPrompt?.Contains("Symptom Matcher", StringComparison.OrdinalIgnoreCase) == true)
         {
-            return Task.FromResult(JsonResult($"{{\"EquipmentId\":\"{EquipmentId}\",\"ManualRevision\":\"rev-4\",\"MatchedSymptoms\":[\"overheating\",\"vibration\"],\"EvidenceChunks\":[]}}"));
+            // If the prompt already contains a tool result, return the final JSON
+            if (request.Prompt.Contains("Tool 'SearchManuals' result:", StringComparison.Ordinal) ||
+                request.Prompt.Contains("Tool 'QueryFaultHistory' result:", StringComparison.Ordinal))
+            {
+                return Task.FromResult(JsonResult($"{{\"EquipmentId\":\"{EquipmentId}\",\"ManualRevision\":\"rev-4\",\"MatchedSymptoms\":[\"overheating\",\"vibration\"],\"Reasoning\":\"Mock reasoning based on evidence.\",\"EvidenceChunks\":[{{\"ChunkId\":\"10101010-1010-1010-1010-101010101010\",\"Content\":\"Mock evidence for testing\",\"Score\":0.95}}]}}"));
+            }
+
+            // First pass: Call the SearchManuals tool to gather evidence
+            return Task.FromResult(new CompletionResult(
+                "",
+                new TokenUsage(1, 1),
+                ToolCalls:
+                [
+                    new ToolCall("call_search", "SearchManuals", $"{{\"query\":\"overheating vibration\",\"equipmentId\":\"{EquipmentId}\"}}")
+                ]));
         }
 
         if (request.SystemPrompt?.Contains("Diagnostic Planner", StringComparison.OrdinalIgnoreCase) == true)
@@ -241,9 +255,25 @@ public sealed class DeterministicToolDispatcher : IToolDispatcher
         ToolInvocationRequest request,
         CancellationToken cancellationToken = default)
     {
-        var result = request.ToolName.Equals("DraftWorkOrder", StringComparison.OrdinalIgnoreCase)
-            ? "{\"Success\":true,\"Status\":\"Drafted\"}"
-            : "{\"IsApproved\":true,\"RemainingBudget\":9.50,\"RejectionReason\":null}";
+        string result;
+        if (request.ToolName.Equals("DraftWorkOrder", StringComparison.OrdinalIgnoreCase))
+        {
+            result = "{\"Success\":true,\"Status\":\"Drafted\"}";
+        }
+        else if (request.ToolName.Equals("ValidateBudget", StringComparison.OrdinalIgnoreCase))
+        {
+            result = "{\"IsApproved\":true,\"RemainingBudget\":9.50,\"RejectionReason\":null}";
+        }
+        else if (request.ToolName.Equals("SearchManuals", StringComparison.OrdinalIgnoreCase) ||
+                 request.ToolName.Equals("QueryFaultHistory", StringComparison.OrdinalIgnoreCase))
+        {
+            // Return valid evidence chunks that the SymptomMatcherAgent can parse
+            result = "{\"chunks\":[{\"chunkId\":\"10101010-1010-1010-1010-101010101010\",\"content\":\"Mock manual excerpt for P-101\",\"score\":0.95}]}";
+        }
+        else
+        {
+            result = "{}";
+        }
 
         return Task.FromResult(new ToolDispatchResult(
             request.ToolName,

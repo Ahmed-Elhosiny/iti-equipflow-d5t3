@@ -63,9 +63,9 @@ public sealed class SequentialSupervisorOrchestrator(
         workflowTimeout.CancelAfter(WorkflowTimeout);
         var workflowToken = workflowTimeout.Token;
 
-        try
+                try
         {
-                        // --- STEP 1: Symptom Matcher ---
+            // --- STEP 1: Symptom Matcher ---
             var (symptomResult, step1Gov) = await ExecuteStepWithBudgetAsync(
                 symptomMatcher,
                 new SymptomMatchInput(request.SymptomDescription, request.EquipmentIdHint),
@@ -79,9 +79,15 @@ public sealed class SequentialSupervisorOrchestrator(
 
             if (step1Gov?.Status == CostGovernorStatus.Cached)
             {
-                finalStatus = AgentRunStatus.Success;
+                finalStatus = AgentRunStatus.Cached;
                 outputSummary = "Semantic cache hit.";
                 return WorkflowResult.Cached(step1Gov.CachedResponse!);
+            }
+            
+            if (step1Gov?.Status == CostGovernorStatus.Blocked)
+            {
+                finalStatus = AgentRunStatus.BudgetExhausted;
+                return WorkflowResult.BudgetExhausted(step1Gov.Reason, step1Gov.EstimatedCost, step1Gov.RemainingBudget);
             }
 
             if (symptomResult.Error is not null)
@@ -89,12 +95,23 @@ public sealed class SequentialSupervisorOrchestrator(
                 var fallbackResult = await TryRagFallbackAsync(request.SymptomDescription, symptomResult.Error, eventCollector, workflowToken);
                 if (fallbackResult is not null)
                 {
-                    finalStatus = AgentRunStatus.PartialSuccess;
+                    finalStatus = AgentRunStatus.Degraded;
                     outputSummary = "Degraded to RAG fallback due to agent failure.";
                     return fallbackResult;
                 }
                 finalError = symptomResult.Error;
+                finalStatus = AgentRunStatus.Failed;
                 return WorkflowResult.Failed(symptomResult.Error);
+            }
+
+             // --- GROUNDEDNESS GATE (AG-007) ---
+            if (!symptomResult.Output.IsGrounded)
+            {
+                finalStatus = AgentRunStatus.Refused;
+                finalError = "Insufficient evidence to generate a safe diagnostic plan.";
+                // We return the Refused status with the reason code. 
+                // The client will see the ungrounded_response reason code.
+                return WorkflowResult.Refused(finalError);
             }
 
             // --- STEP 2: Diagnostic Planner ---
@@ -117,17 +134,18 @@ public sealed class SequentialSupervisorOrchestrator(
                 var fallbackResult = await TryRagFallbackAsync(request.SymptomDescription, diagnosticResult.Error, eventCollector, workflowToken);
                 if (fallbackResult is not null)
                 {
-                    finalStatus = AgentRunStatus.PartialSuccess;
+                    finalStatus = AgentRunStatus.Degraded;
                     outputSummary = "Degraded to RAG fallback due to agent failure.";
                     return fallbackResult;
                 }
                 finalError = diagnosticResult.Error;
+                finalStatus = AgentRunStatus.Failed;
                 return WorkflowResult.Failed(diagnosticResult.Error);
             }
 
             // --- STEP 3: Work Order Generator ---
             var step3InputText = $"{symptomResult.Output.EquipmentId} {diagnosticResult.Output.Reasoning}";
-            var (workOrderResult, _) = await ExecuteStepWithBudgetAsync(
+            var (workOrderResult, step3Gov) = await ExecuteStepWithBudgetAsync(
                 workOrderGenerator,
                 new WorkOrderInput(symptomResult.Output.EquipmentId, diagnosticResult.Output),
                 step3InputText,
@@ -136,6 +154,12 @@ public sealed class SequentialSupervisorOrchestrator(
                 eventCollector,
                 workflowToken,
                 stepIndex: 3);
+
+            if (step3Gov?.Status == CostGovernorStatus.Blocked)
+            {
+                finalStatus = AgentRunStatus.BudgetExhausted;
+                return WorkflowResult.BudgetExhausted(step3Gov.Reason, step3Gov.EstimatedCost, step3Gov.RemainingBudget);
+            }
 
             if (workOrderResult.Error is not null)
             {
@@ -148,30 +172,32 @@ public sealed class SequentialSupervisorOrchestrator(
             finalStatus = AgentRunStatus.Success;
             outputSummary = workOrderResult.Output.Summary;
 
-            // Write to semantic cache for future zero-cost fallbacks
             if (cachePort is not null && !string.IsNullOrWhiteSpace(outputSummary))
             {
-                try
-                {
-                    await cachePort.AddAsync(request.SymptomDescription, outputSummary, workflowToken);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Failed to write successful workflow result to semantic cache.");
-                }
+                try { await cachePort.AddAsync(request.SymptomDescription, outputSummary, workflowToken); }
+                catch (Exception ex) { logger.LogWarning(ex, "Failed to write successful workflow result to semantic cache."); }
             }
 
             return WorkflowResult.PendingApproval(workOrderResult.Output);
         }
         catch (OperationCanceledException exception) when (workflowToken.IsCancellationRequested)
         {
+            // Distinguish between User Cancellation and System Timeout
+            if (cancellationToken.IsCancellationRequested)
+            {
+                finalStatus = AgentRunStatus.Cancelled;
+                finalError = "User cancelled the operation.";
+                return WorkflowResult.Cancelled();
+            }
+            
             finalStatus = AgentRunStatus.Timeout;
             finalError = exception.Message;
-            throw;
+            return WorkflowResult.Failed("Workflow timed out.");
         }
-        catch
+        catch (Exception ex)
         {
             finalStatus = AgentRunStatus.Failed;
+            finalError = ex.Message;
             throw;
         }
         finally
@@ -294,7 +320,7 @@ public sealed class SequentialSupervisorOrchestrator(
                     excerpt));
             }
 
-            return WorkflowResult.Fallback(searchResult.Results, originalError);
+            return WorkflowResult.Degraded(searchResult.Results, originalError);
         }
         catch (Exception ex)
         {
@@ -411,36 +437,38 @@ public record WorkflowResult(
     IReadOnlyList<EquipFlow.Domain.Search.SearchResult>? FallbackSearchResults = null)
 {
     public static WorkflowResult PendingApproval(WorkOrderOutput draft) =>
-        new(WorkflowStatus.PendingApproval, draft, null);
+        new(WorkflowStatus.PendingApproval, draft, null, "success");
 
-    public static WorkflowResult Blocked(string reason) =>
-        new(WorkflowStatus.Blocked, null, reason);
-
-    public static WorkflowResult Blocked(
-        string reason,
-        decimal estimatedCost,
-        decimal remainingBudget) =>
-        new(WorkflowStatus.Blocked, null, reason, reason, estimatedCost, remainingBudget);
+    public static WorkflowResult BudgetExhausted(string reason, decimal estimatedCost, decimal remainingBudget) =>
+        new(WorkflowStatus.BudgetExhausted, null, reason, "budget_exhausted", estimatedCost, remainingBudget);
 
     public static WorkflowResult Cached(string response) =>
         new(WorkflowStatus.Cached, null, null, "semantic_cache_hit", CachedResponse: response);
 
     public static WorkflowResult Failed(string error) =>
-        new(WorkflowStatus.Failed, null, error);
+        new(WorkflowStatus.Failed, null, error, "internal_error");
 
     public static WorkflowResult PartialSuccess(DiagnosticPlanOutput diagnosticPlan, string message) =>
-        new(WorkflowStatus.PartialSuccess, null, message, DiagnosticPlan: diagnosticPlan);
+        new(WorkflowStatus.PartialSuccess, null, message, "partial_success", DiagnosticPlan: diagnosticPlan);
 
-    public static WorkflowResult Fallback(IReadOnlyList<EquipFlow.Domain.Search.SearchResult> results, string originalError) =>
-        new(WorkflowStatus.Fallback, null, originalError, "agent_failure_fallback_rag", FallbackSearchResults: results);
+    public static WorkflowResult Degraded(IReadOnlyList<EquipFlow.Domain.Search.SearchResult> results, string originalError) =>
+        new(WorkflowStatus.Degraded, null, originalError, "agent_degraded_to_rag", FallbackSearchResults: results);
+
+    public static WorkflowResult Refused(string reason, IReadOnlyList<EquipFlow.Domain.Search.SearchResult>? insufficientCitations = null) =>
+        new(WorkflowStatus.Refused, null, reason, "ungrounded_response", FallbackSearchResults: insufficientCitations);
+        
+    public static WorkflowResult Cancelled() =>
+        new(WorkflowStatus.Cancelled, null, "The operation was cancelled by the user.", "user_cancelled");
 }
 
 public enum WorkflowStatus
 {
     PendingApproval,
-    Blocked,
+    BudgetExhausted, // Was 'Blocked'
     Failed,
     Cached,
     PartialSuccess,
-    Fallback
+    Degraded,        // Was 'Fallback'
+    Refused,         // NEW: Groundedness failure
+    Cancelled        // NEW: User cancellation
 }

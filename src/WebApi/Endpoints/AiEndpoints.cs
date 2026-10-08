@@ -178,7 +178,7 @@ public static class AiEndpoints
             var workflowResult = await orchestratorTask;
             string? assistantMessage = null;
 
-            if (workflowResult.Status == WorkflowStatus.Blocked)
+            if (workflowResult.Status == WorkflowStatus.BudgetExhausted)
             {
                 // Emit the structured SDD §5.3 refusal DTO in-band (CG-005 / CG-008)
                 await EmitEventAsync(new ChatStreamEvent("budget.exhausted", runId, null, ToBudgetRefusal(workflowResult)));
@@ -326,14 +326,17 @@ public static class AiEndpoints
             {
                 WorkflowStatus.PendingApproval
                     or WorkflowStatus.PartialSuccess
-                    or WorkflowStatus.Cached => Results.Ok(ToResponse(workflowResult)),
-                WorkflowStatus.Blocked => Results.Json(
+                    or WorkflowStatus.Cached
+                    or WorkflowStatus.Degraded
+                    or WorkflowStatus.Refused => Results.Ok(ToResponse(workflowResult)), // Refused is 200 OK with payload
+                WorkflowStatus.BudgetExhausted => Results.Json(
                     ToBudgetRefusal(workflowResult),
                     statusCode: StatusCodes.Status402PaymentRequired),
                 WorkflowStatus.Failed => Results.Problem(
                     statusCode: StatusCodes.Status422UnprocessableEntity,
                     title: "Workflow Failed",
                     detail: workflowResult.ErrorMessage),
+                WorkflowStatus.Cancelled => Results.StatusCode(StatusCodes.Status499ClientClosedRequest),
                 _ => Results.Problem(
                     statusCode: StatusCodes.Status500InternalServerError,
                     title: "Unknown Workflow Status")

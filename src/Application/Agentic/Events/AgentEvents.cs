@@ -151,13 +151,19 @@ public sealed record CitationAttached(
 
 /// <summary>
 /// Describes the outcome of an agent run for observability and evaluation.
+/// Aligned with AGENT-DESIGN.md §4.
 /// </summary>
 public enum AgentRunStatus
 {
     Success,
     PartialSuccess,
     Failed,
-    Timeout
+    Timeout,
+    Cached,
+    Refused,
+    BudgetExhausted,
+    Cancelled,
+    Degraded
 }
 
 /// <summary>

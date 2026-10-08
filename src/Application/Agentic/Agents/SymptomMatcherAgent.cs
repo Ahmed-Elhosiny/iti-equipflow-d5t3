@@ -159,6 +159,12 @@ public sealed class SymptomMatcherAgent(
                 }
             }
         }
+                // --- GROUNDEDNESS CHECK (AG-007) ---
+        // Combine tool-retrieved evidence with any evidence the LLM might have returned directly in its JSON
+        var allEvidence = evidence.Any() ? evidence : (output.EvidenceChunks ?? []).ToList();
+        var maxScore = allEvidence.Any() ? allEvidence.Max(e => e.Score) : 0.0;
+        var isGrounded = allEvidence.Count > 0 && maxScore > 0.4; 
+
         output = output! with
         {
             EquipmentId = string.IsNullOrWhiteSpace(output.EquipmentId)
@@ -169,7 +175,8 @@ public sealed class SymptomMatcherAgent(
                 : output.ManualRevision,
             MatchedSymptoms = output.MatchedSymptoms is null || output.MatchedSymptoms.Count == 0
                 ? [input.SymptomDescription]
-                : output.MatchedSymptoms
+                : output.MatchedSymptoms,
+            IsGrounded = isGrounded
         };
 
         var citations = evidence
