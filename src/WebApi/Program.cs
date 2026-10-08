@@ -199,6 +199,33 @@ builder.Services.AddScoped<EquipFlow.Application.Ports.LLM.ILLMGenerationPort>(s
 builder.Services.AddEquipFlowTools();
 builder.Services.AddSingleton<EquipFlow.Application.Agentic.Abstractions.IActiveRunRegistry, EquipFlow.Infrastructure.Agentic.ActiveRunRegistry>();
 
+// >>> EMBEDDING DIMENSION GUARD: Fail-fast on mismatch <<<
+// The database migration 'ChangeEmbeddingDimensionsTo1024' enforces 1024-dim vectors.
+// We must ensure the configured embedding model matches this to prevent silent data corruption.
+var ollamaSection = builder.Configuration.GetSection("Llm:Ollama");
+if (!ollamaSection.Exists()) ollamaSection = builder.Configuration.GetSection("Ollama");
+var configuredModel = ollamaSection["EmbeddingModel"] ?? "mxbai-embed-large";
+
+// Map of known models and their dimensions. 
+// If a user configures a model not in this list or with wrong dims, we block startup.
+var knownModels = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+{
+    { "mxbai-embed-large", 1024 },
+    { "nomic-embed-text", 768 },
+    { "all-minilm", 384 },
+    { "text-embedding-3-small", 1536 }, // OpenAI
+    { "text-embedding-ada-002", 1536 }  // OpenAI
+};
+
+if (knownModels.TryGetValue(configuredModel, out int dims) && dims != 1024)
+{
+    throw new InvalidOperationException(
+        $"FATAL CONFIGURATION ERROR: The database schema requires 1024-dimensional embeddings (mxbai-embed-large). " +
+        $"The configured model '{configuredModel}' produces {dims}-dimensional vectors. " +
+        $"Please update 'Llm:Ollama:EmbeddingModel' to 'mxbai-embed-large' or run a new migration to alter the vector column size.");
+}
+// >>> END EMBEDDING DIMENSION GUARD <<<
+
 var app = builder.Build();
 
 var isSeedMode = args.Any(argument => string.Equals(argument, "--seed", StringComparison.OrdinalIgnoreCase))
