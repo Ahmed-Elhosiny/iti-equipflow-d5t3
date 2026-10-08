@@ -198,6 +198,8 @@ builder.Services.AddScoped<EquipFlow.Application.Ports.LLM.ILLMGenerationPort>(s
 
 builder.Services.AddEquipFlowTools();
 builder.Services.AddSingleton<EquipFlow.Application.Agentic.Abstractions.IActiveRunRegistry, EquipFlow.Infrastructure.Agentic.ActiveRunRegistry>();
+builder.Services.AddScoped<EquipFlow.Application.Ports.IUserRepository, EquipFlow.Infrastructure.Persistence.Repositories.UserRepository>();
+builder.Services.AddScoped<EquipFlow.Application.Ports.IBudgetIncreaseRequestRepository, EquipFlow.Infrastructure.Persistence.Repositories.BudgetIncreaseRequestRepository>();
 
 // >>> EMBEDDING DIMENSION GUARD: Fail-fast on mismatch <<<
 // The database migration 'ChangeEmbeddingDimensionsTo1024' enforces 1024-dim vectors.

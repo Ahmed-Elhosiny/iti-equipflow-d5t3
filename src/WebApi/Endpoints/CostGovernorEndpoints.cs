@@ -1,3 +1,4 @@
+using EquipFlow.Application.Budget.Commands;
 using EquipFlow.Application.CostGovernor.Queries;
 using MediatR;
 
@@ -16,52 +17,47 @@ public static class CostGovernorEndpoints
         endpoints.MapGet("/api/budget/me", GetMyBudget)
             .WithName("GetMyBudget")
             .WithSummary("Retrieves the current budget status for the authenticated user.")
-            .WithDescription("Retrieves the current budget status for the authenticated user.")
             .RequireAuthorization();
 
         endpoints.MapGet("/api/budgets/me", GetMyBudget)
             .WithName("GetMyBudgetLegacy")
             .WithSummary("Get the authenticated user's budget")
-            .WithDescription("Returns the budget and recent spend for the authenticated user.")
             .RequireAuthorization();
 
-               endpoints.MapGet("/api/budgets", GetAllBudgets)
+        endpoints.MapGet("/api/budgets", GetAllBudgets)
             .WithName("GetAllBudgets")
             .WithSummary("Get all user budgets")
-            .WithDescription("Returns all user budgets. This operation is restricted to managers.")
             .RequireAuthorization(policy => policy.RequireRole("Manager"));
 
         endpoints.MapGet("/api/cost/spend", GetMySpend)
             .WithName("GetMySpend")
             .WithSummary("Get the authenticated user's spend history")
-            .WithDescription("Returns the run spend history for the authenticated user (CG-008).")
             .RequireAuthorization();
 
-        return endpoints;
+        // FIXED: Extracted to static methods to resolve lambda return type inference errors
+        endpoints.MapPost("/api/budgets/me/increase-request", RequestBudgetIncrease)
+            .WithName("RequestBudgetIncrease")
+            .RequireAuthorization();
+
+        endpoints.MapPost("/api/budgets/increase-requests/{id}/review", ReviewBudgetRequest)
+            .WithName("ReviewBudgetRequest")
+            .RequireAuthorization(policy => policy.RequireRole("Supervisor", "Manager"));
 
         return endpoints;
     }
 
-    /// <summary>
-    /// Gets the budget belonging to the authenticated user.
-    /// </summary>
     private static async Task<IResult> GetMyBudget(
         HttpContext httpContext,
         ISender sender,
         CancellationToken cancellationToken)
     {
         var userId = httpContext.User.GetUserId();
-        if (!userId.HasValue)
-        {
-            return TypedResults.Unauthorized();
-        }
+        if (!userId.HasValue) return TypedResults.Unauthorized();
 
         try
         {
             var budget = await sender.Send(new GetMyBudgetQuery(userId.Value), cancellationToken);
-            return budget is null
-                ? TypedResults.NotFound()
-                : TypedResults.Ok(budget);
+            return budget is null ? TypedResults.NotFound() : TypedResults.Ok(budget);
         }
         catch (InvalidOperationException)
         {
@@ -69,9 +65,6 @@ public static class CostGovernorEndpoints
         }
     }
 
-    /// <summary>
-    /// Gets all user budgets for an authenticated manager.
-    /// </summary>
     private static async Task<IResult> GetAllBudgets(
         ISender sender,
         CancellationToken cancellationToken)
@@ -79,21 +72,52 @@ public static class CostGovernorEndpoints
         var budgets = await sender.Send(new GetAllBudgetsQuery(), cancellationToken);
         return TypedResults.Ok(budgets);
     }
-        /// <summary>
-    /// Gets the spend history for the authenticated user.
-    /// </summary>
+
     private static async Task<IResult> GetMySpend(
         HttpContext httpContext,
         ISender sender,
         CancellationToken cancellationToken)
     {
         var userId = httpContext.User.GetUserId();
-        if (!userId.HasValue)
-        {
-            return TypedResults.Unauthorized();
-        }
+        if (!userId.HasValue) return TypedResults.Unauthorized();
 
         var spendHistory = await sender.Send(new GetMySpendQuery(userId.Value), cancellationToken);
         return TypedResults.Ok(spendHistory);
     }
+
+    /// <summary>
+    /// Creates a new budget increase request for the authenticated user.
+    /// </summary>
+    private static async Task<IResult> RequestBudgetIncrease(
+        HttpContext httpContext,
+        RequestBudgetIncreaseRequest req,
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        var userId = httpContext.User.GetUserId();
+        if (!userId.HasValue) return TypedResults.Unauthorized();
+        
+        var id = await sender.Send(new RequestBudgetIncreaseCommand(userId.Value, req.Amount, req.Reason), cancellationToken);
+        return TypedResults.Ok(new { RequestId = id });
+    }
+
+    /// <summary>
+    /// Reviews (approves or rejects) a pending budget increase request.
+    /// </summary>
+    private static async Task<IResult> ReviewBudgetRequest(
+        Guid id,
+        HttpContext httpContext,
+        ReviewBudgetRequestRequest req,
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        var reviewerId = httpContext.User.GetUserId();
+        if (!reviewerId.HasValue) return TypedResults.Unauthorized();
+        
+        var success = await sender.Send(new ReviewBudgetRequestCommand(id, reviewerId.Value, req.IsApproved), cancellationToken);
+        return success ? TypedResults.Ok() : TypedResults.NotFound();
+    }
+
+    private sealed record RequestBudgetIncreaseRequest(decimal Amount, string Reason);
+    private sealed record ReviewBudgetRequestRequest(bool IsApproved);
 }

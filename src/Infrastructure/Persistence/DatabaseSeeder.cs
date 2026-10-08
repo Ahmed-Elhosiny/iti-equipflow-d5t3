@@ -47,6 +47,7 @@ public class DatabaseSeeder
     {
         _logger.LogInformation("Starting database seeding...");
 
+        await SeedUsersAsync(cancellationToken);
         await SeedEquipmentsAsync(cancellationToken);
         await SeedUserBudgetsAsync(cancellationToken);
         await SeedDocumentsAsync(cancellationToken);
@@ -236,5 +237,25 @@ public class DatabaseSeeder
 
         await _context.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("Seeded {Count} documents into the corpus.", manuals.Count);
+    }
+        private async Task SeedUsersAsync(CancellationToken cancellationToken)
+    {
+        if (await _context.Users.AnyAsync(cancellationToken))
+        {
+            _logger.LogInformation("Users already seeded.");
+            return;
+        }
+
+        var users = new List<User>
+        {
+            new User(Guid.Parse("00000000-0000-0000-0000-000000000001"), "technician", PasswordHasher.Hash("password"), "Technician"),
+            new User(Guid.Parse("00000000-0000-0000-0000-000000000002"), "engineer", PasswordHasher.Hash("password"), "Engineer"),
+            new User(Guid.Parse("00000000-0000-0000-0000-000000000003"), "manager", PasswordHasher.Hash("password"), "Manager"),
+            new User(Guid.Parse("00000000-0000-0000-0000-000000000004"), "supervisor", PasswordHasher.Hash("password"), "Supervisor")
+        };
+
+        _context.Users.AddRange(users);
+        await _context.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Seeded 4 Users with PBKDF2 hashed passwords.");
     }
 }

@@ -1,6 +1,8 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using EquipFlow.Application.Ports;
+using EquipFlow.Infrastructure.Persistence;
 using EquipFlow.WebApi.Options;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -22,32 +24,34 @@ public static class AuthEndpoints
         return app;
     }
 
-    private static IResult Login(
+        private static async Task<IResult> Login(
         LoginRequest request,
-        IOptions<JwtOptions> jwtOptions)
+        IUserRepository userRepository,
+        IOptions<JwtOptions> jwtOptions,
+        CancellationToken cancellationToken)
     {
-       // Hardcoded MVP Demo Users for testing - Aligned with DatabaseSeeder.cs
-        var demoUsers = new Dictionary<string, (string Password, string Role, Guid Id)>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["technician"] = ("password", "Technician", Guid.Parse("00000000-0000-0000-0000-000000000001")),
-            ["engineer"] = ("password", "Engineer", Guid.Parse("00000000-0000-0000-0000-000000000002")),
-            ["manager"] = ("password", "Manager", Guid.Parse("00000000-0000-0000-0000-000000000003")),
-            ["supervisor"] = ("password", "Supervisor", Guid.Parse("00000000-0000-0000-0000-000000000004"))
-        };
+        var user = await userRepository.GetByUsernameAsync(request.Username, cancellationToken);
+        bool isValid = false;
 
-        if (!demoUsers.TryGetValue(request.Username, out var user) || user.Password != request.Password)
+        if (user is not null && user.IsActive)
         {
-            return Results.Problem(
-                statusCode: StatusCodes.Status401Unauthorized,
-                title: "Invalid credentials");
+            isValid = PasswordHasher.Verify(request.Password, user.PasswordHash);
+        }
+        else
+        {
+            // Burn CPU time to prevent user-enumeration timing attacks
+            PasswordHasher.Verify(request.Password, PasswordHasher.Hash("dummy_password_for_timing")); 
+        }
+
+        if (!isValid || user is null)
+        {
+            return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Invalid credentials");
         }
 
         var settings = jwtOptions.Value;
         if (string.IsNullOrWhiteSpace(settings.Key))
         {
-            return Results.Problem(
-                statusCode: StatusCodes.Status500InternalServerError,
-                title: "JWT Key is not configured in appsettings.json");
+            return Results.Problem(statusCode: StatusCodes.Status500InternalServerError, title: "JWT Key is not configured");
         }
 
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(settings.Key));
@@ -56,7 +60,7 @@ public static class AuthEndpoints
         var claims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new Claim(JwtRegisteredClaimNames.Name, request.Username),
+            new Claim(JwtRegisteredClaimNames.Name, user.Username),
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Role, user.Role),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
@@ -72,7 +76,6 @@ public static class AuthEndpoints
             signingCredentials: credentials);
 
         var tokenString = new JwtSecurityTokenHandler().WriteToken(tokenDescriptor);
-
         return Results.Ok(new LoginResponse(tokenString, expiration));
     }
 
