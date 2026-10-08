@@ -90,7 +90,7 @@ Structure-Aware Chunker (SimpleTextChunker)
 Embedding Generator (OpenAI / Ollama / Mock)
     ↓
 pgvector Storage (DocumentChunk table)
-    - Embedding vector (1536 dimensions for OpenAI, 1024 for Ollama)
+    - Embedding vector (1024 dimensions - mxbai-embed-large)
     - Metadata (equipment_id, document_id, page_number, section)
 ```
 
