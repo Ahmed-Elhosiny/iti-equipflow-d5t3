@@ -1,13 +1,16 @@
-using System.Collections.Generic;
-
 namespace EquipFlow.Application.Agentic.Contracts;
 
 // Agent 1: Symptom Matcher
-public record SymptomMatchInput(string SymptomDescription, string? EquipmentIdHint = null);
-public record SymptomMatchOutput(string EquipmentId, string ManualRevision, IReadOnlyList<string> MatchedSymptoms, string Reasoning)
+public record SymptomMatchInput(string SymptomDescription, string? EquipmentIdHint = null, string? ProductionLineId = null);
+public record SymptomMatchOutput(
+    string EquipmentId, 
+    string ManualRevision, 
+    IReadOnlyList<string> MatchedSymptoms, 
+    string Reasoning,
+    bool IsGrounded = true) // <--- ADDED for AG-007 / Refusal logic
 {
-	public IReadOnlyList<RankedFault> RankedFaults { get; init; } = [];
-	public IReadOnlyList<EvidenceChunk> EvidenceChunks { get; init; } = [];
+    public IReadOnlyList<RankedFault> RankedFaults { get; init; } = [];
+    public IReadOnlyList<EvidenceChunk> EvidenceChunks { get; init; } = [];
 }
 public record RankedFault(string FaultName, double ConfidenceScore, IReadOnlyList<Guid> EvidenceChunkIds)
 {
