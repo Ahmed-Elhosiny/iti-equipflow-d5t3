@@ -11,8 +11,8 @@ public sealed class MockEmbeddingAdapter(ILogger<MockEmbeddingAdapter> logger) :
     {
         logger.LogInformation("MockEmbeddingAdapter: Generating dummy embeddings for {Count} texts.", texts.Count);
         
-        // text-embedding-3-small uses 1536 dimensions
-        var dummyEmbedding = new float[1536]; 
+        // FIXED: Changed from 1536 to 1024 to match the canonical DB schema (mxbai-embed-large)
+        var dummyEmbedding = new float[1024]; 
         var result = new ReadOnlyMemory<float>[texts.Count];
         
         for (int i = 0; i < texts.Count; i++)
