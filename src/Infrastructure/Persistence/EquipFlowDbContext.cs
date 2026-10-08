@@ -24,6 +24,8 @@ public class EquipFlowDbContext : DbContext
     public DbSet<RunSpend> RunSpends { get; set; } = null!;
      public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<ConversationMessage> ConversationMessages => Set<ConversationMessage>();
+    public DbSet<User> Users => Set<User>();
+    public DbSet<BudgetIncreaseRequest> BudgetIncreaseRequests => Set<BudgetIncreaseRequest>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
