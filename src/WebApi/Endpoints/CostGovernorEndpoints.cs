@@ -1,4 +1,5 @@
 using EquipFlow.Application.Budget.Commands;
+using EquipFlow.Application.Budget.Queries;
 using EquipFlow.Application.CostGovernor.Queries;
 using MediatR;
 
@@ -41,6 +42,11 @@ public static class CostGovernorEndpoints
 
         endpoints.MapPost("/api/budgets/increase-requests/{id}/review", ReviewBudgetRequest)
             .WithName("ReviewBudgetRequest")
+            .RequireAuthorization(policy => policy.RequireRole("Supervisor", "Manager"));
+
+        endpoints.MapGet("/api/budgets/increase-requests/pending", GetPendingBudgetRequests)
+            .WithName("GetPendingBudgetRequests")
+            .WithSummary("Get all pending budget increase requests (Supervisor/Manager only)")
             .RequireAuthorization(policy => policy.RequireRole("Supervisor", "Manager"));
 
         return endpoints;
@@ -100,7 +106,17 @@ public static class CostGovernorEndpoints
         var id = await sender.Send(new RequestBudgetIncreaseCommand(userId.Value, req.Amount, req.Reason), cancellationToken);
         return TypedResults.Ok(new { RequestId = id });
     }
-
+    
+    /// <summary>
+    /// Retrieves all pending budget increase requests for supervisor review.
+    /// </summary>
+    private static async Task<IResult> GetPendingBudgetRequests(
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        var requests = await sender.Send(new GetPendingBudgetRequestsQuery(), cancellationToken);
+        return TypedResults.Ok(requests);
+    }
     /// <summary>
     /// Reviews (approves or rejects) a pending budget increase request.
     /// </summary>
