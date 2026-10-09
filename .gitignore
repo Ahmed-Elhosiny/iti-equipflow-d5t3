@@ -45,3 +45,4 @@ build/
 *.whl
 *.egg-info/
 .equipflow-token
+*.deb
