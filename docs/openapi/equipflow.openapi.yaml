@@ -894,8 +894,10 @@ components:
       type: object
       properties:
         correlationId: { type: string, format: uuid }
-        status: { type: string }
+        status: { type: string, nullable: true }
         startedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time, nullable: true }
+        totalCostUsd: { type: number, format: decimal }
         events:
           type: array
           items:
@@ -903,4 +905,6 @@ components:
             properties:
               eventType: { type: string }
               timestamp: { type: string, format: date-time }
+              agentName: { type: string }
               payload: { type: object }
+              success: { type: boolean, nullable: true }
