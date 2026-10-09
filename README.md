@@ -130,7 +130,7 @@ Follow this numbered script to experience every core capability of the D5T3 vari
 
 1. **Authenticate:** Use the `/api/auth/login` endpoint in Swagger to get a JWT token for a `Technician` (password: `password`).
 2. **Ingest a Document:** POST a PDF to `/api/documents` to observe the structure-aware chunking and idempotent ingestion pipeline.
-3. **Ask a Grounded Question:** Send a POST request to `/api/ai/chat` with: *"What are the common causes of P-101 overheating?"* Observe the verifiable citations in the response.
+3. **Ask a Grounded Question:** Send a POST request to `/api/chat` with: *"What are the common causes of P-101 overheating?"* Observe the verifiable citations in the response.
 4. **Run the Multi-Agent Workflow:** POST to `/api/ai/analyze` with the symptom: *"Pump P-101 is drawing 18% more current than normal and discharge pressure is low."* Observe the 3-agent sequential execution (Symptom → Diagnostic → Work Order).
 5. **Act on the Approval Gate:** Take the `WorkOrderId` from the previous step and POST to `/api/workorders/{id}/submit`. Then, log in as a `Supervisor` and POST to `/api/workorders/{id}/approve`.
 6. **Test Safety Guardrails (Adversarial):** Try to dispatch the work order *without* completing the mandatory safety prerequisites, or send a prompt injection attempt. Observe the system structurally refuse the request.
