@@ -54,7 +54,7 @@ public sealed class GetAgentRunByIdQueryHandler(IAgentEventStore eventStore)
             @event.GetType().Name,
             @event.Timestamp.UtcDateTime,
             @event.AgentName,
-            JsonSerializer.Serialize(@event, @event.GetType()),
+            JsonSerializer.SerializeToElement(@event, @event.GetType()),
             success);
     }
 }

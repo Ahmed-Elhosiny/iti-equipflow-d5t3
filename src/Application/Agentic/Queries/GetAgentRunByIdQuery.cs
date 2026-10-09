@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MediatR;
 
 namespace EquipFlow.Application.Agentic.Queries;
@@ -16,5 +17,5 @@ public sealed record AgentEventDto(
     string EventType,
     DateTime Timestamp,
     string AgentName,
-    string SerializedData,
+    JsonElement Payload,
     bool? Success);
