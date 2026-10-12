@@ -29,4 +29,9 @@ public sealed class DocumentRepository(EquipFlowDbContext context) : IDocumentRe
     {
         await context.SaveChangesAsync(cancellationToken);
     }
+    public async Task DeleteAsync(Document document, CancellationToken cancellationToken)
+    {
+        context.Documents.Remove(document);
+        await context.SaveChangesAsync(cancellationToken);
+    }
 }
