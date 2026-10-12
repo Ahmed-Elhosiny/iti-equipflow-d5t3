@@ -1,3 +1,4 @@
+using EquipFlow.Application.Documents.Commands;
 using EquipFlow.Application.Documents.Queries;
 using EquipFlow.Application.Documents.Queries.Dtos;
 using EquipFlow.Application.Features.Documents.Commands.IngestDocument;
@@ -33,6 +34,25 @@ public static class DocumentsEndpoints
             .Produces<IReadOnlyList<DocumentDto>>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized);
 
+        endpoints.MapGet("/api/documents/{id:guid}", GetDocumentById)
+            .WithName("GetDocumentById")
+            .WithSummary("Get document details by ID")
+            .WithTags("Documents")
+            .RequireAuthorization()
+            .Produces<DocumentDto>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status401Unauthorized);
+
+        endpoints.MapDelete("/api/documents/{id:guid}", DeleteDocument)
+            .WithName("DeleteDocument")
+            .WithSummary("Delete a document and its chunks (Manager only)")
+            .WithTags("Documents")
+            .RequireAuthorization("ManagerOnly")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         return endpoints;
     }
 
@@ -44,7 +64,25 @@ public static class DocumentsEndpoints
         var result = await sender.Send(query, cancellationToken);
         return Results.Ok(result);
     }
+        private static async Task<IResult> GetDocumentById(
+        Guid id,
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        var query = new GetDocumentByIdQuery(id);
+        var result = await sender.Send(query, cancellationToken);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
 
+    private static async Task<IResult> DeleteDocument(
+        Guid id,
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        var command = new DeleteDocumentCommand(id);
+        var deleted = await sender.Send(command, cancellationToken);
+        return deleted ? Results.NoContent() : Results.NotFound();
+    }
     private static async Task<IResult> IngestDocument(
         IFormFile? file,
         [FromForm] DocumentType type,
