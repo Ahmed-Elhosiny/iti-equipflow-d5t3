@@ -17,13 +17,16 @@ public class UserBudget
         (total, reservation) => total + reservation.EstimatedCost);
     public Money AvailableAmount => TotalLimit - ConsumedAmount - ReservedAmount;
 
-    public UserBudget(Guid userId, Money totalLimit)
+    // Required by EF Core for materialization from the database
+    private UserBudget() { }
+
+    public UserBudget(Guid userId, Money totalLimit, int resetDayOfMonth = 1)
     {
         Id = Guid.NewGuid();
         UserId = userId;
         TotalLimit = totalLimit;
         ConsumedAmount = Money.FromDecimal(0);
-        NextResetDate = CalculateNextResetDate(DateTimeOffset.UtcNow);
+        NextResetDate = CalculateNextResetDate(DateTimeOffset.UtcNow, resetDayOfMonth);
     }
 
     public bool TryReserve(Guid reservationId, Money estimatedCost)
@@ -58,13 +61,13 @@ public class UserBudget
             _reservations.Remove(reservation);
     }
 
-    public bool TryReset(DateTimeOffset currentDate)
+    public bool TryReset(DateTimeOffset currentDate, int resetDayOfMonth = 1)
     {
         if (currentDate < NextResetDate)
             return false;
 
         ConsumedAmount = Money.FromDecimal(0);
-        NextResetDate = CalculateNextResetDate(currentDate);
+        NextResetDate = CalculateNextResetDate(currentDate, resetDayOfMonth);
         
         // Clear any stale reservations that might have been left behind
         _reservations.Clear();
@@ -72,11 +75,36 @@ public class UserBudget
         return true;
     }
 
-    private static DateTimeOffset CalculateNextResetDate(DateTimeOffset currentDate) =>
-        new DateTimeOffset(currentDate.Year, currentDate.Month, 1, 0, 0, 0, TimeSpan.Zero).AddMonths(1);
+    private static DateTimeOffset CalculateNextResetDate(DateTimeOffset currentDate, int resetDayOfMonth)
+    {
+        var year = currentDate.Year;
+        var month = currentDate.Month;
+        var maxDayInMonth = DateTime.DaysInMonth(year, month);
+        var targetDay = Math.Min(resetDayOfMonth, maxDayInMonth);
+        
+        var nextReset = new DateTimeOffset(year, month, targetDay, 0, 0, 0, TimeSpan.Zero);
+        
+        if (nextReset <= currentDate)
+        {
+            if (month == 12)
+            {
+                year++;
+                month = 1;
+            }
+            else
+            {
+                month++;
+            }
+            
+            maxDayInMonth = DateTime.DaysInMonth(year, month);
+            targetDay = Math.Min(resetDayOfMonth, maxDayInMonth);
+            nextReset = new DateTimeOffset(year, month, targetDay, 0, 0, 0, TimeSpan.Zero);
+        }
+        
+        return nextReset;
+    }
 
-
-       public void CommitCapped(Guid reservationId, Money actualCost)
+    public void CommitCapped(Guid reservationId, Money actualCost)
     {
         var reservation = _reservations.FirstOrDefault(item => item.Id == reservationId)
             ?? throw new InvalidOperationException($"Budget reservation with id {reservationId} was not found.");
@@ -88,6 +116,7 @@ public class UserBudget
         _reservations.Remove(reservation);
         ConsumedAmount += amountToCommit;
     }
+
     public void IncreaseLimit(Money amount)
     {
         TotalLimit += amount;
