@@ -308,7 +308,7 @@ CREATE TABLE document_chunks (
     id UUID PRIMARY KEY,
     document_id UUID REFERENCES documents(id),
     content TEXT NOT NULL,
-    embedding VECTOR(1536), -- OpenAI embedding dimension
+    embedding VECTOR(1024), -- mxbai-embed-large dimension
     metadata JSONB,
     page_number INT,
     section VARCHAR(255)

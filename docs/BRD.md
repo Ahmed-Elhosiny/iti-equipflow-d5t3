@@ -70,7 +70,7 @@ EquipFlow addresses all three by combining grounded retrieval (so answers are tr
 - **FR-022:** Typed contracts between agents (C# records, not free text) ✅
 - **FR-023:** Tool allow-lists per agent ✅
 - **FR-024:** Max-iteration breaker (3 per agent) ✅
-- **FR-025:** Per-step timeout (45s) and global timeout (120s) ✅
+- **FR-025:** Per-step timeout (30s) and global timeout (120s) ✅
 - **FR-026:** Graceful degradation to plain RAG on failure ✅
 - **FR-027:** Correlation ID flow across all agents and tools ✅
 - **FR-028:** Agent event recording for observability ✅

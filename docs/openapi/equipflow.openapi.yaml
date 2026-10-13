@@ -619,6 +619,109 @@ paths:
       operationId: liveness
       responses:
         '200': { description: Alive }
+  /api/documents/{id}:
+    get:
+      tags: [Documents]
+      summary: Get document details
+      operationId: getDocumentById
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationId' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Document details
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentMeta' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Documents]
+      summary: Delete a document and its chunks (Manager role)
+      operationId: deleteDocument
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationId' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Document deleted
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/budgets/requests:
+    post:
+      tags: [CostGovernor]
+      summary: Request a budget increase
+      operationId: requestBudgetIncrease
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [requestedAmount, reason]
+              properties:
+                requestedAmount: { type: number }
+                reason: { type: string }
+      responses:
+        '201':
+          description: Request created
+
+  /api/budgets/requests/pending:
+    get:
+      tags: [CostGovernor]
+      summary: List pending budget increase requests
+      operationId: getPendingBudgetRequests
+      security:
+        - bearerAuth: [Supervisor]
+      responses:
+        '200':
+          description: Pending requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string, format: uuid }
+                    userId: { type: string, format: uuid }
+                    requestedAmount: { type: number }
+                    reason: { type: string }
+                    status: { type: string }
+
+  /api/budgets/requests/{id}/review:
+    post:
+      tags: [CostGovernor]
+      summary: Review (approve/reject) a budget increase request
+      operationId: reviewBudgetRequest
+      security:
+        - bearerAuth: [Supervisor]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approved]
+              properties:
+                approved: { type: boolean }
+                comment: { type: string, nullable: true }
+      responses:
+        '204':
+          description: Request reviewed
+        '404': { $ref: '#/components/responses/NotFound' }
 
 components:
   securitySchemes:
