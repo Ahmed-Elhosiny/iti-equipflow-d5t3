@@ -29,7 +29,7 @@ public sealed class ReciprocalRankFusionService
                     chunk.ChunkId,
                     chunk.DocumentId,
                     chunk.Content,
-                    entry.Value,
+                    chunk.Score,
                     chunk.Citation);
             })
             .ToList();
