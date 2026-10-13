@@ -1,12 +1,15 @@
 using EquipFlow.Application.Budget.Ports;
+using EquipFlow.Application.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace EquipFlow.Infrastructure.BackgroundServices;
 
 public sealed class BudgetResetBackgroundService(
     IServiceScopeFactory scopeFactory,
+    IOptions<BudgetOptions> budgetOptions,
     ILogger<BudgetResetBackgroundService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -36,9 +39,11 @@ public sealed class BudgetResetBackgroundService(
         var budgetsToReset = await repository.GetBudgetsNeedingResetAsync(currentDate, stoppingToken);
         
         var resetCount = 0;
+        var resetDay = budgetOptions.Value.ResetDayOfMonth;
+        
         foreach (var budget in budgetsToReset)
         {
-            if (budget.TryReset(currentDate))
+            if (budget.TryReset(currentDate, resetDay))
             {
                 await repository.UpdateAsync(budget, stoppingToken);
                 resetCount++;

@@ -78,6 +78,46 @@ public class UserBudgetTests
         Assert.Equal(Money.FromDecimal(100m), budget.AvailableAmount);
     }
 
-    private static UserBudget CreateBudget(decimal totalLimit) =>
-        new(Guid.NewGuid(), Money.FromDecimal(totalLimit));
+    [Fact]
+    public void TryReset_ResetsConsumedAmountAndClearsReservations()
+    {
+        var budget = CreateBudget(100m, 15);
+        var reservationId = Guid.NewGuid();
+        budget.TryReserve(reservationId, Money.FromDecimal(40m));
+        budget.Commit(reservationId, Money.FromDecimal(20m));
+
+        // Force reset by passing a date far in the future
+        var result = budget.TryReset(DateTimeOffset.UtcNow.AddMonths(2), 15);
+
+        Assert.True(result);
+        Assert.Equal(Money.FromDecimal(0m), budget.ConsumedAmount);
+        Assert.Empty(budget.Reservations);
+    }
+
+    [Fact]
+    public void TryReset_ReturnsFalseIfCurrentDateIsBeforeNextResetDate()
+    {
+        var budget = CreateBudget(100m, 15);
+        
+        // Assuming NextResetDate is in the future, passing today should fail
+        var result = budget.TryReset(DateTimeOffset.UtcNow.AddDays(-1), 15);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void CalculateNextResetDate_ClampsToLastDayOfMonth_When31stInShortMonth()
+    {
+        var budget = CreateBudget(100m, 31);
+        
+        // Move to next month to trigger calculation for a potentially shorter month
+        var futureDate = budget.NextResetDate.AddMonths(1); 
+        budget.TryReset(futureDate, 31);
+        
+        var maxDay = DateTime.DaysInMonth(budget.NextResetDate.Year, budget.NextResetDate.Month);
+        Assert.Equal(Math.Min(31, maxDay), budget.NextResetDate.Day);
+    }
+
+    private static UserBudget CreateBudget(decimal totalLimit, int resetDayOfMonth = 1) =>
+        new(Guid.NewGuid(), Money.FromDecimal(totalLimit), resetDayOfMonth);
 }

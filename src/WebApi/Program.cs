@@ -80,6 +80,9 @@ builder.Services.AddOptions<JwtOptions>()
 builder.Services.AddOptions<AgenticOptions>()
     .Bind(builder.Configuration.GetSection(AgenticOptions.SectionName));
 
+builder.Services.AddOptions<BudgetOptions>()
+    .Bind(builder.Configuration.GetSection(BudgetOptions.SectionName));
+
 // Configure Rate Limiting 
 builder.Services.AddRateLimiter(options =>
 {
