@@ -10,8 +10,8 @@ namespace EquipFlow.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("CREATE INDEX IF NOT EXISTS ix_document_chunks_embedding_hnsw ON document_chunks USING hnsw (embedding vector_cosine_ops);");
-            migrationBuilder.Sql("CREATE INDEX IF NOT EXISTS ix_document_chunks_content_gin ON document_chunks USING gin (to_tsvector('simple', content));");
+            migrationBuilder.Sql("CREATE INDEX IF NOT EXISTS ix_document_chunks_embedding_hnsw ON document_chunks USING hnsw (\"Embedding\" vector_cosine_ops);");
+            migrationBuilder.Sql("CREATE INDEX IF NOT EXISTS ix_document_chunks_content_gin ON document_chunks USING gin (to_tsvector('simple', \"Content\"));");
         }
 
         /// <inheritdoc />
