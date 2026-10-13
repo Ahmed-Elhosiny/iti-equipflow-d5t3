@@ -18,7 +18,14 @@ public record RankedFault(string FaultName, double ConfidenceScore, IReadOnlyLis
 	public string Description => FaultName;
 	public double Confidence => ConfidenceScore;
 }
-public record EvidenceChunk(Guid ChunkId, string Content, double Score);
+public record EvidenceChunk(
+    Guid ChunkId, 
+    string Content, 
+    double Score,
+    Guid DocumentId,
+    string DocumentTitle,
+    int? Page = null,
+    string? Section = null);
 
 // Agent 2: Diagnostic & Safety Planner
 public record DiagnosticPlanInput(string EquipmentId, string ManualRevision, IReadOnlyList<string> Symptoms);
