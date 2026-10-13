@@ -164,7 +164,7 @@ Comprehensive documentation is provided to explain the business context, system 
 | Database | PostgreSQL | 18 |
 | Vector Search | pgvector | latest |
 | LLM Abstraction | Custom `ILLMGenerationPort` | — |
-| Telemetry | OpenTelemetry / Custom Event Store | latest |
+| Telemetry | Custom Event/Trace Store (PostgreSQL + JSONB) | � |
 | Testing | xUnit + NSubstitute + Testcontainers | latest |
 
 ---
