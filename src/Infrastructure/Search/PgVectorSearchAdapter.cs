@@ -53,10 +53,10 @@ public sealed class PgVectorSearchAdapter : IVectorSearchPort
                 candidate.Chunk,
                 nameof(DocumentChunk.Embedding)) != null);
 
-         if (query.Filters.EquipmentId is not null)
+        if (query.Filters.EquipmentId is not null && !query.Filters.EquipmentId.Equals("unknown", StringComparison.OrdinalIgnoreCase))
         {
             candidates = candidates.Where(candidate =>
-                candidate.Chunk.EquipmentId == query.Filters.EquipmentId);
+            candidate.Chunk.EquipmentId == query.Filters.EquipmentId);
         }
 
         if (query.Filters.DocumentType is not null)
