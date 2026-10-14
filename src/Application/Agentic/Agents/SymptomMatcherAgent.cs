@@ -200,7 +200,7 @@ public sealed class SymptomMatcherAgent(
             Name,
             context.CorrelationId);
 
-        private static IEnumerable<EvidenceChunk> ReadEvidence(string? resultJson)
+    private static IEnumerable<EvidenceChunk> ReadEvidence(string? resultJson)
     {
         if (string.IsNullOrWhiteSpace(resultJson))
         {
@@ -208,34 +208,35 @@ public sealed class SymptomMatcherAgent(
         }
 
         using var document = JsonDocument.Parse(resultJson);
-        if (!document.RootElement.TryGetProperty("chunks", out var chunks))
+        // FIX: Tool executor serializes with default PascalCase
+        if (!document.RootElement.TryGetProperty("Chunks", out var chunks))
         {
             yield break;
         }
 
         foreach (var chunk in chunks.EnumerateArray())
         {
-            var chunkId = chunk.GetProperty("chunkId").GetGuid();
-            var content = chunk.GetProperty("content").GetString() ?? string.Empty;
-            var score = chunk.GetProperty("score").GetDouble();
+            var chunkId = chunk.GetProperty("ChunkId").GetGuid();
+            var content = chunk.GetProperty("Content").GetString() ?? string.Empty;
+            var score = chunk.GetProperty("Score").GetDouble();
             
             Guid documentId = Guid.Empty;
             string documentTitle = "Unknown Document";
             int? page = null;
             string? section = null;
 
-            if (chunk.TryGetProperty("citation", out var citationElement))
+            if (chunk.TryGetProperty("Citation", out var citationElement))
             {
-                if (citationElement.TryGetProperty("documentId", out var docIdEl) && docIdEl.ValueKind == JsonValueKind.String)
+                if (citationElement.TryGetProperty("DocumentId", out var docIdEl) && docIdEl.ValueKind == JsonValueKind.String)
                     Guid.TryParse(docIdEl.GetString(), out documentId);
                     
-                if (citationElement.TryGetProperty("documentTitle", out var docTitleEl) && docTitleEl.ValueKind == JsonValueKind.String)
+                if (citationElement.TryGetProperty("DocumentTitle", out var docTitleEl) && docTitleEl.ValueKind == JsonValueKind.String)
                     documentTitle = docTitleEl.GetString() ?? "Unknown Document";
                     
-                if (citationElement.TryGetProperty("page", out var pageEl) && pageEl.ValueKind == JsonValueKind.Number)
+                if (citationElement.TryGetProperty("Page", out var pageEl) && pageEl.ValueKind == JsonValueKind.Number)
                     page = pageEl.GetInt32();
                     
-                if (citationElement.TryGetProperty("section", out var secEl) && secEl.ValueKind == JsonValueKind.String)
+                if (citationElement.TryGetProperty("Section", out var secEl) && secEl.ValueKind == JsonValueKind.String)
                     section = secEl.GetString();
             }
 
