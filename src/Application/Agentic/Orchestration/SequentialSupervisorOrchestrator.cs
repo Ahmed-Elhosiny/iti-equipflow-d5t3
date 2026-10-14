@@ -18,11 +18,12 @@ public sealed class SequentialSupervisorOrchestrator(
     ISender sender,
     ITokenEstimator tokenEstimator,
     Microsoft.Extensions.Options.IOptions<EquipFlow.Application.Options.OpenAIOptions> openAiOptions, 
+    Microsoft.Extensions.Options.IOptions<EquipFlow.Application.Options.AgenticOptions> agenticOptions,
     ILogger<SequentialSupervisorOrchestrator> logger,
     ICachePort? cachePort = null)
 {
-    private static readonly TimeSpan AgentTimeout = TimeSpan.FromSeconds(45);
-    private static readonly TimeSpan WorkflowTimeout = TimeSpan.FromSeconds(120);
+    private readonly TimeSpan AgentTimeout = TimeSpan.FromSeconds(agenticOptions.Value.StepTimeoutSeconds);
+    private readonly TimeSpan WorkflowTimeout = TimeSpan.FromSeconds(agenticOptions.Value.GlobalTimeoutSeconds);
     private readonly Microsoft.Extensions.Options.IOptions<EquipFlow.Application.Options.OpenAIOptions> _openAiOptions = openAiOptions;
 
     public async Task<WorkflowResult> RunWorkflowAsync(
@@ -371,7 +372,7 @@ public sealed class SequentialSupervisorOrchestrator(
         {
             var timedOut = workflowToken.IsCancellationRequested
                 ? "Agent execution stopped because the workflow timed out."
-                : "Agent execution timed out after 45 seconds.";
+                : $"Agent execution timed out after {AgentTimeout.TotalSeconds} seconds.";
                 
             eventCollector.Add(new AgentStepCompleted(
                 correlationId,

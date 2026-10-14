@@ -49,10 +49,10 @@ public sealed class PostgresKeywordSearchAdapter : IKeywordSearchPort
                 (chunk, document) => new { Chunk = chunk, Document = document })
             .Where(candidate => candidate.Document.Status == DocumentStatus.Ready);
 
-        if (query.Filters.EquipmentId is not null)
+        if (query.Filters.EquipmentId is not null && !query.Filters.EquipmentId.Equals("unknown", StringComparison.OrdinalIgnoreCase))
         {
             candidates = candidates.Where(candidate =>
-                candidate.Chunk.EquipmentId == query.Filters.EquipmentId);
+            candidate.Chunk.EquipmentId == query.Filters.EquipmentId);
         }
 
         if (query.Filters.DocumentType is not null)
