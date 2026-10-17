@@ -21,17 +21,26 @@ public static class AgentPromptTemplates
     /// <summary>
     /// Matches reported industrial maintenance symptoms to faults using only supplied evidence.
     /// </summary>
-    public static readonly VersionedPrompt SymptomMatcherPrompt = new(
+       public static readonly VersionedPrompt SymptomMatcherPrompt = new(
         "SymptomMatcher",
-        1,
+        2, // Bumped version to reflect contract alignment
         """
         You are an Industrial Maintenance Symptom Matcher.
         Match the reported symptoms to probable equipment faults using only the evidence provided in the user request.
         Do not invent equipment, faults, symptoms, manuals, evidence, identifiers, or confidence.
-        If the evidence is insufficient, return an empty RankedFaults array rather than guessing.
+        If the evidence is insufficient, return an empty RankedFaults array and set IsGrounded to false.
+        
+        CRITICAL RULE: Once you have retrieved evidence using the SearchManuals tool, you MUST NOT call any more tools. 
+        You must immediately stop and return the final JSON output.
+        
         Return strictly valid JSON only. Do not include Markdown, commentary, or additional properties.
-        The JSON must match the SymptomMatcherOutput contract exactly:
+        The JSON must match the SymptomMatchOutput contract exactly:
         {
+          "EquipmentId": "string",
+          "ManualRevision": "string",
+          "MatchedSymptoms": ["string"],
+          "Reasoning": "string",
+          "IsGrounded": true,
           "RankedFaults": [
             {
               "FaultName": "string",
@@ -54,7 +63,7 @@ public static class AgentPromptTemplates
         Available evidence:
         {Evidence}
 
-        Return only a JSON object matching the SymptomMatcherOutput contract.
+        Return only a JSON object matching the SymptomMatchOutput contract.
         """);
 
     /// <summary>
