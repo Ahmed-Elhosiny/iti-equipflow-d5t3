@@ -20,16 +20,25 @@ public sealed class ReciprocalRankFusionService
         AddRankedResults(vectorResults, k, fusedScores, preferredChunks);
         AddRankedResults(keywordResults, k, fusedScores, preferredChunks);
 
+
+        // Theoretical max score when a chunk is ranked 1st in both input lists (vector + keyword)
+        var maxPossibleScore = 2.0 / (k + 1); 
+
         return fusedScores
             .OrderByDescending(entry => entry.Value)
             .Select(entry =>
             {
                 var chunk = preferredChunks[entry.Key];
+                
+                // Normalize the fused score to a 0.0 - 1.0 range for threshold comparison
+                var normalizedScore = entry.Value / maxPossibleScore;
+                if (normalizedScore > 1.0) normalizedScore = 1.0;
+
                 return new RetrievedChunk(
                     chunk.ChunkId,
                     chunk.DocumentId,
                     chunk.Content,
-                    chunk.Score,
+                    normalizedScore, // <--- FIX: Use normalized score instead of raw chunk.Score
                     chunk.Citation);
             })
             .ToList();

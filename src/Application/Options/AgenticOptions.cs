@@ -19,9 +19,9 @@ public sealed class AgenticOptions
     /// <summary>
     /// Minimum relevance score (0.0 to 1.0) required for a retrieved chunk to be considered grounded evidence.
     /// Chunks below this threshold are discarded, triggering the refusal path (FR-2).
-    /// Tuned to 0.60 to accommodate local embedding models (mxbai-embed-large) and synthetic seeder text.
+    /// Tuned to 0.40 to accommodate local embedding models (mxbai-embed-large) and synthetic seeder text.
     /// </summary>
-    public double MinRelevanceScore { get; set; } = 0.60;
+    public double MinRelevanceScore { get; set; } = 0.40;
 
     /// <summary>
     /// Maximum number of retries for transient LLM network/rate-limit errors before cascading to the next provider (FR-5 / ADR-001).
