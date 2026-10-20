@@ -44,6 +44,10 @@ public sealed class OpenAILLMGenerationAdapter : ILLMGenerationPort
             clientOptions.Endpoint = new Uri(options.Value.Endpoint);
         }
 
+        // FIX: Increase network timeout to 5 minutes to prevent TaskCanceledException 
+        // when LLM inference + retries exceed the default 100s HttpClient limit.
+        clientOptions.NetworkTimeout = TimeSpan.FromSeconds(300);
+
         var credential = new ApiKeyCredential(options.Value.ApiKey);
         _client = new OpenAIClient(credential, clientOptions);
         _options = options;
@@ -70,6 +74,11 @@ public sealed class OpenAILLMGenerationAdapter : ILLMGenerationPort
                 Temperature = (float)request.Temperature,
                 MaxOutputTokenCount = request.MaxTokens
             };
+            // FIX: Only set MaxOutputTokenCount if it has a valid positive value
+            if (request.MaxTokens.HasValue && request.MaxTokens.Value > 0)
+            {
+                completionOptions.MaxOutputTokenCount = request.MaxTokens.Value;
+            }
 
             if (request.Tools is { Count: > 0 })
             {
@@ -152,6 +161,11 @@ public sealed class OpenAILLMGenerationAdapter : ILLMGenerationPort
                 Temperature = (float)request.Temperature,
                 MaxOutputTokenCount = request.MaxTokens
             };
+            // FIX: Only set MaxOutputTokenCount if it has a valid positive value
+            if (request.MaxTokens.HasValue && request.MaxTokens.Value > 0)
+            {
+                completionOptions.MaxOutputTokenCount = request.MaxTokens.Value;
+            }
 
             updates = _client
                 .GetChatClient(_options.Value.Model)

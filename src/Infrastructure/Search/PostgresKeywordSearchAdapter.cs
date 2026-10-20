@@ -31,10 +31,8 @@ public sealed class PostgresKeywordSearchAdapter : IKeywordSearchPort
                 ignoreCase: true,
                 out var parsedDocumentType))
             {
-                return [];
+                documentType = parsedDocumentType;
             }
-
-            documentType = parsedDocumentType;
         }
 
         // Capture query text locally to ensure it is passed cleanly as a SQL parameter
