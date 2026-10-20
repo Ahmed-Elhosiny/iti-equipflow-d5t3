@@ -34,10 +34,8 @@ public sealed class PgVectorSearchAdapter : IVectorSearchPort
                 ignoreCase: true,
                 out var parsedDocumentType))
             {
-                return [];
+                documentType = parsedDocumentType;
             }
-
-            documentType = parsedDocumentType;
         }
 
         var queryVector = new Vector(queryEmbedding.ToArray());
