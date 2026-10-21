@@ -53,10 +53,13 @@ public sealed class PostgresKeywordSearchAdapter : IKeywordSearchPort
             candidate.Chunk.EquipmentId == query.Filters.EquipmentId);
         }
 
-        if (query.Filters.DocumentType is not null)
+        if (documentType.HasValue)
         {
+            // FIX: Capture the value type directly to avoid EF Core closure evaluation bugs 
+            // when the original string filter was invalid and documentType is null.
+            var docTypeValue = documentType.Value; 
             candidates = candidates.Where(candidate =>
-                candidate.Document.Type == documentType!.Value);
+                candidate.Document.Type == docTypeValue);
         }
 
         if (query.Filters.ProductionLine is not null)
