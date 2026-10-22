@@ -12,31 +12,77 @@ public sealed class MockLLMGenerationAdapter : ILLMGenerationPort
     private const string CompletionContent = "Mock LLM completion for EquipFlow tests.";
 
     /// <inheritdoc />
-    public Task<LLMResult> CompleteAsync(
+        public Task<LLMResult> CompleteAsync(
         LLMRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        
         if (string.IsNullOrWhiteSpace(request.ReservationId))
         {
             throw new InvalidOperationException("ADR-004 Violation: LLM generation requires a valid Budget ReservationId.");
         }
 
+        var promptText = string.Join(" ", request.Messages.Select(m => m.Content ?? string.Empty));
+        string completionContent;
 
-        var promptLength = 0;
-        foreach (var message in request.Messages)
+        // Deterministic JSON routing based on the agent calling the LLM
+        if (promptText.Contains("SymptomMatcher", StringComparison.OrdinalIgnoreCase) || request.Tools?.Any(t => t.Name == "SearchManuals") == true)
         {
-            promptLength += message.Content.Length;
+            // FIX: Added dummy EvidenceChunks with Score > 0.4 to pass the AG-007 groundedness check
+            completionContent = """
+            {
+              "EquipmentId": "P-101",
+              "ManualRevision": "2.1",
+              "MatchedSymptoms": ["overheating", "grinding noise"],
+              "Reasoning": "Mock Symptom Matcher reasoning.",
+              "IsGrounded": true,
+              "RankedFaults": [{"FaultName": "Bearing Failure", "ConfidenceScore": 0.9, "EvidenceChunkIds": []}],
+              "EvidenceChunks": [
+                {
+                  "ChunkId": "11111111-1111-1111-1111-111111111111",
+                  "Content": "Mock evidence: P-101 overheating due to bearing failure.",
+                  "Score": 0.95,
+                  "DocumentId": "22222222-2222-2222-2222-222222222222",
+                  "DocumentTitle": "P-101 Mock Manual",
+                  "Page": 10,
+                  "Section": "Troubleshooting"
+                }
+              ]
+            }
+            """;
+        }
+        else if (promptText.Contains("Diagnostic", StringComparison.OrdinalIgnoreCase) || request.Tools?.Any(t => t.Name == "GenerateSafetyChecklist") == true)
+        {
+            completionContent = """
+            {
+              "Steps": [{"Description": "Inspect primary components for abnormal wear.", "EvidenceChunkId": "11111111-1111-1111-1111-111111111111"}],
+              "SafetyPrerequisites": [{"Description": "Perform Lockout/Tagout procedure.", "IsMandatory": true}],
+              "Reasoning": "Mock Diagnostic Planner reasoning."
+            }
+            """;
+        }
+        else
+        {
+            completionContent = """
+            {
+              "Title": "Maintenance Work Order for P-101",
+              "Description": "Address overheating and grinding noise by inspecting and replacing bearings.",
+              "RequiredParts": ["Bearings", "Lubricant"],
+              "Priority": "High",
+              "EstimatedCost": 250.00,
+              "Summary": "Mock Work Order Generator summary."
+            }
+            """;
         }
 
-                var promptTokens = EstimateTokens(promptLength);
-        var completionTokens = EstimateTokens(CompletionContent.Length);
+        var promptLength = request.Messages.Sum(m => m.Content?.Length ?? 0);
+        var promptTokens = EstimateTokens(promptLength);
+        var completionTokens = EstimateTokens(completionContent.Length);
 
         var result = new LLMResult(
-            CompletionContent,
+            completionContent,
             null,
             "stop",
             promptTokens,
