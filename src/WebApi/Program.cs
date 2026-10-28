@@ -83,6 +83,9 @@ builder.Services.AddOptions<AgenticOptions>()
 builder.Services.AddOptions<BudgetOptions>()
     .Bind(builder.Configuration.GetSection(BudgetOptions.SectionName));
 
+builder.Services.AddOptions<CostGovernorOptions>()
+    .Bind(builder.Configuration.GetSection(CostGovernorOptions.SectionName));
+
 // Configure Rate Limiting 
 builder.Services.AddRateLimiter(options =>
 {
@@ -170,16 +173,16 @@ builder.Services.AddScoped<IAgent<DiagnosticPlanInput, DiagnosticPlanOutput>>(se
 builder.Services.AddScoped<WorkOrderGeneratorAgent>();
 builder.Services.AddScoped<IAgent<WorkOrderInput, WorkOrderOutput>>(serviceProvider =>
     serviceProvider.GetRequiredService<WorkOrderGeneratorAgent>());
-builder.Services.AddSingleton<EquipFlow.Application.Ports.ICachePort, EquipFlow.Infrastructure.Search.InMemorySemanticCacheAdapter>();
-builder.Services.AddScoped<EquipFlow.Application.Ports.IModelRouter, EquipFlow.Infrastructure.LLM.BudgetAwareModelRouter>();
-builder.Services.AddScoped<EquipFlow.Application.Ports.ITransactionManager, EquipFlow.Infrastructure.Persistence.EfTransactionManager>();
+builder.Services.AddSingleton<ICachePort, InMemorySemanticCacheAdapter>();
+builder.Services.AddScoped<IModelRouter, EquipFlow.Infrastructure.LLM.BudgetAwareModelRouter>();
+builder.Services.AddScoped<ITransactionManager, EfTransactionManager>();
 builder.Services.AddScoped<ICostGovernor, CostGovernorService>();
 builder.Services.AddHostedService<EquipFlow.Infrastructure.BackgroundServices.BudgetResetBackgroundService>();
 builder.Services.AddHostedService<EquipFlow.Infrastructure.BackgroundServices.DanglingReservationSweepService>();
 builder.Services.AddScoped<SequentialSupervisorOrchestrator>();
 builder.Services.AddRagSearchInfrastructure();
-builder.Services.AddScoped<EquipFlow.Application.Budget.Ports.IRunSpendRepository, EquipFlow.Infrastructure.Persistence.Repositories.RunSpendRepository>();
-builder.Services.AddSingleton<EquipFlow.Application.Ports.ITokenEstimator, EquipFlow.Infrastructure.Text.HeuristicTokenEstimator>();
+builder.Services.AddScoped<IRunSpendRepository, RunSpendRepository>();
+builder.Services.AddSingleton<ITokenEstimator, HeuristicTokenEstimator>();
 
 builder.Services.AddLLMProviders(builder.Configuration);
 
@@ -200,8 +203,8 @@ builder.Services.AddScoped<EquipFlow.Application.Ports.LLM.ILLMGenerationPort>(s
         .GetProvider(primaryProvider));
 
 builder.Services.AddEquipFlowTools();
-builder.Services.AddSingleton<EquipFlow.Application.Agentic.Abstractions.IActiveRunRegistry, EquipFlow.Infrastructure.Agentic.ActiveRunRegistry>();
-builder.Services.AddScoped<EquipFlow.Application.Ports.IUserRepository, EquipFlow.Infrastructure.Persistence.Repositories.UserRepository>();
+builder.Services.AddSingleton<IActiveRunRegistry, EquipFlow.Infrastructure.Agentic.ActiveRunRegistry>();
+builder.Services.AddScoped<IUserRepository, EquipFlow.Infrastructure.Persistence.Repositories.UserRepository>();
 builder.Services.AddScoped<EquipFlow.Application.Ports.IBudgetIncreaseRequestRepository, EquipFlow.Infrastructure.Persistence.Repositories.BudgetIncreaseRequestRepository>();
 
 // >>> EMBEDDING DIMENSION GUARD: Fail-fast on mismatch <<<
