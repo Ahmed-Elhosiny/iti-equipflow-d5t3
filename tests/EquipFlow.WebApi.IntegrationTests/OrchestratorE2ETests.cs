@@ -22,12 +22,19 @@ using Xunit;
 using EquipFlow.Application.Ports;
 using EquipFlow.Infrastructure.AI;
 using Microsoft.Extensions.Hosting;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace EquipFlow.WebApi.IntegrationTests;
 
 public sealed class OrchestratorE2ETests : IClassFixture<EquipFlowWebApplicationFactory>
 {
     private readonly HttpClient client;
+    private static readonly JsonSerializerOptions TestJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
 
     public OrchestratorE2ETests(EquipFlowWebApplicationFactory factory)
     {
@@ -50,7 +57,7 @@ public sealed class OrchestratorE2ETests : IClassFixture<EquipFlowWebApplication
         using var response = await client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await response.Content.ReadFromJsonAsync<WorkflowResponse>();
+        var body = await response.Content.ReadFromJsonAsync<WorkflowResponse>(TestJsonOptions);
         body.Should().NotBeNull();
         body!.Status.Should().Be(WorkflowStatus.PendingApproval);
     }
@@ -235,13 +242,18 @@ public sealed class OrchestratorDegradationTests
         using var response = await client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await response.Content.ReadFromJsonAsync<WorkflowResponse>();
+        var body = await response.Content.ReadFromJsonAsync<WorkflowResponse>(TestJsonOptions);
         body.Should().NotBeNull();
         body!.Status.Should().Be(WorkflowStatus.PartialSuccess);
         body.DiagnosticPlan.Should().NotBeNull();
         body.DiagnosticPlan!.SafetyPrerequisites.Should().NotBeEmpty();
         body.Draft.Should().BeNull();
     }
+    private static readonly JsonSerializerOptions TestJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
 }
 
 public sealed record WorkflowResponse(

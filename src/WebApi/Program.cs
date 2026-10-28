@@ -29,6 +29,7 @@ using EquipFlow.Application.Options;
 using EquipFlow.Application.Conversations.Ports;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.RateLimiting;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -206,7 +207,11 @@ builder.Services.AddEquipFlowTools();
 builder.Services.AddSingleton<IActiveRunRegistry, EquipFlow.Infrastructure.Agentic.ActiveRunRegistry>();
 builder.Services.AddScoped<IUserRepository, EquipFlow.Infrastructure.Persistence.Repositories.UserRepository>();
 builder.Services.AddScoped<EquipFlow.Application.Ports.IBudgetIncreaseRequestRepository, EquipFlow.Infrastructure.Persistence.Repositories.BudgetIncreaseRequestRepository>();
-
+// Configure JSON serialization to use string names for enums instead of integers
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 // >>> EMBEDDING DIMENSION GUARD: Fail-fast on mismatch <<<
 // The database migration 'ChangeEmbeddingDimensionsTo1024' enforces 1024-dim vectors.
 // We must ensure the configured embedding model matches this to prevent silent data corruption.

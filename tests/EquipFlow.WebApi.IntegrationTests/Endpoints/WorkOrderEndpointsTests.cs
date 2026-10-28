@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using EquipFlow.Application.WorkOrders.Queries;
 using EquipFlow.Domain.Entities;
 using EquipFlow.Infrastructure.Persistence;
@@ -15,6 +17,11 @@ public sealed class WorkOrderEndpointsTests : IClassFixture<EquipFlowWebApplicat
         Guid.Parse("00000000-0000-0000-0000-000000000001");
 
     private readonly HttpClient client;
+      private static readonly JsonSerializerOptions TestJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
     private readonly EquipFlowWebApplicationFactory factory;
 
     public WorkOrderEndpointsTests(EquipFlowWebApplicationFactory factory)
@@ -35,7 +42,7 @@ public sealed class WorkOrderEndpointsTests : IClassFixture<EquipFlowWebApplicat
         using var response = await client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await response.Content.ReadFromJsonAsync<WorkOrderDto>();
+        var body = await response.Content.ReadFromJsonAsync<WorkOrderDto>(TestJsonOptions);
         body.Should().NotBeNull();
         body!.Id.Should().Be(workOrder.Id);
         body.Title.Should().Be("GET by ID");
@@ -54,7 +61,7 @@ public sealed class WorkOrderEndpointsTests : IClassFixture<EquipFlowWebApplicat
         using var response = await client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await response.Content.ReadFromJsonAsync<List<WorkOrderDto>>();
+        var body = await response.Content.ReadFromJsonAsync<List<WorkOrderDto>>(TestJsonOptions);
         body.Should().NotBeNull();
         body!.Should().OnlyContain(workOrder => workOrder.CreatedBy == CurrentUserId.ToString());
         body.Should().Contain(workOrder => workOrder.Title == "Current user's order");
