@@ -28,7 +28,7 @@ public static class CostGovernorEndpoints
         endpoints.MapGet("/api/budgets", GetAllBudgets)
             .WithName("GetAllBudgets")
             .WithSummary("Get all user budgets")
-            .RequireAuthorization(policy => policy.RequireRole("Manager"));
+            .RequireAuthorization(policy => policy.RequireRole("Manager", "Supervisor"));
 
         endpoints.MapGet("/api/cost/spend", GetMySpend)
             .WithName("GetMySpend")
