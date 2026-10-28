@@ -10,6 +10,8 @@ using Microsoft.Extensions.Logging;
 using Npgsql;
 using System.Data;
 using System.Text;
+using EquipFlow.Application.Options;
+using Microsoft.Extensions.Options;
 
 namespace EquipFlow.Infrastructure.Persistence;
 
@@ -19,17 +21,21 @@ public class DatabaseSeeder
     private readonly ITextChunker _chunker;
     private readonly IEmbeddingPort _embeddingPort;
     private readonly ILogger<DatabaseSeeder> _logger;
+    private readonly IOptions<CostGovernorOptions> _costGovernorOptions;
+
 
     public DatabaseSeeder(
         EquipFlowDbContext context, 
         ITextChunker chunker,
         IEmbeddingPort embeddingPort,
+        IOptions<CostGovernorOptions> costGovernorOptions,
         ILogger<DatabaseSeeder> logger)
     {
         _context = context;
         _chunker = chunker;
         _embeddingPort = embeddingPort;
         _logger = logger;
+        _costGovernorOptions = costGovernorOptions;
     }
 
     public async Task MigrateAndSeedAsync(CancellationToken cancellationToken = default)
@@ -139,17 +145,23 @@ public class DatabaseSeeder
         var managerId = Guid.Parse("00000000-0000-0000-0000-000000000003");
         var supervisorId = Guid.Parse("00000000-0000-0000-0000-000000000004");
 
+        // FIX: Calculate seeded USD budget based on the configured token budget.
+        // Baseline assumption: $1.00 USD per 1,000 tokens.
+        var tokens = _costGovernorOptions.Value.DefaultMonthlyTokenBudget;
+        var budgetUsd = (tokens / 1000m) * 1.00m;
+        if (budgetUsd <= 0) budgetUsd = 0.0001m; // Prevent zero/negative budgets
+
         var budgets = new List<UserBudget>
         {
-            new UserBudget(technicianId, Money.FromDecimal(100.00m)),
-            new UserBudget(engineerId, Money.FromDecimal(100.00m)),
-            new UserBudget(managerId, Money.FromDecimal(100.00m)),
-            new UserBudget(supervisorId, Money.FromDecimal(100.00m))
+            new UserBudget(technicianId, Money.FromDecimal(budgetUsd)),
+            new UserBudget(engineerId, Money.FromDecimal(budgetUsd)),
+            new UserBudget(managerId, Money.FromDecimal(budgetUsd)),
+            new UserBudget(supervisorId, Money.FromDecimal(budgetUsd))
         };
 
         _context.UserBudgets.AddRange(budgets);
         await _context.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("Seeded 4 User Budgets.");
+        _logger.LogInformation("Seeded 4 User Budgets with {BudgetUsd} USD each (derived from {Tokens} tokens).", budgetUsd, tokens);
     }
 
     private async Task SeedDocumentsAsync(CancellationToken cancellationToken)
